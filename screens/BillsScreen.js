@@ -477,12 +477,17 @@ const BillsScreen = ({ friends, addBill, profileName, recentBills = [] }) => {
         {/* Enhanced Header */}
         <View style={styles.headerContainer}>
           <View style={styles.headerContent}>
-            <Text style={styles.appTitle}>💰 Bill Buddy</Text>
-            <Text style={styles.headerSubtitle}>
-              Smart expense splitting made simple
-            </Text>
-            <View style={styles.headerAccent} />
+            <View style={styles.headerIconContainer}>
+              <Text style={styles.headerIcon}>💰</Text>
+            </View>
+            <View style={styles.headerTextContainer}>
+              <Text style={styles.headerTitle}>Bill Buddy</Text>
+              <Text style={styles.headerSubtitle}>
+                Split expenses with ease
+              </Text>
+            </View>
           </View>
+          <View style={styles.headerAccent} />
         </View>
 
         {/* Expense Name */}
@@ -949,37 +954,53 @@ const styles = {
   headerContainer: {
     backgroundColor: "#fff",
     borderRadius: 20,
+    padding: 20,
     marginBottom: 30,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 12,
-    elevation: 8,
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 5,
+    position: "relative",
+    overflow: "hidden",
   },
   headerContent: {
-    padding: 24,
+    flexDirection: "row",
     alignItems: "center",
   },
-  appTitle: {
-    fontSize: 36,
-    fontWeight: "800",
-    color: "#1976D2",
-    marginBottom: 8,
-    textAlign: "center",
-    letterSpacing: 1,
+  headerIconContainer: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: "#8B4513",
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: 16,
+  },
+  headerIcon: {
+    fontSize: 28,
+  },
+  headerTextContainer: {
+    flex: 1,
+  },
+  headerTitle: {
+    fontSize: 28,
+    fontWeight: "bold",
+    color: "#8B4513",
+    marginBottom: 4,
   },
   headerSubtitle: {
     fontSize: 16,
     color: "#666",
-    textAlign: "center",
-    marginBottom: 16,
-    fontWeight: "500",
+    fontStyle: "italic",
   },
   headerAccent: {
-    width: 60,
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    right: 0,
     height: 4,
-    backgroundColor: "#1976D2",
-    borderRadius: 2,
+    backgroundColor: "#8B4513",
   },
 
   inputGroup: {
