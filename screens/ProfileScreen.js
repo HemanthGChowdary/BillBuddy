@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useCallback, useEffect } from "react";
 import {
   View,
   Text,
@@ -12,171 +12,125 @@ import {
   StyleSheet,
   Image,
   Switch,
-  Modal,
-  Dimensions,
-  Pressable, // Import Pressable
-  ActionSheetIOS, // For iOS specific action sheet
+  Pressable,
+  Linking,
+  ActionSheetIOS,
 } from "react-native";
 import DropDownPicker from "react-native-dropdown-picker";
-import * as ImagePicker from "expo-image-picker"; // Import ImagePicker
-
-const { width } = Dimensions.get("window");
+import Ionicons from "@expo/vector-icons/Ionicons";
+import * as ImagePicker from "expo-image-picker";
 
 export default function ProfileScreen({
   profileName,
   setProfileName,
   profileEmail,
   setProfileEmail,
+  darkMode,
+  setDarkMode,
+  onTabPress, // Function to be called on tab press
 }) {
-  // Existing states
-  const [countryCodeValue, setCountryCodeValue] = useState(null);
-  const [countryCode, setCountryCode] = useState([
-    { label: "🇺🇸 USA (+1)", value: "+1-us" },
-    { label: "🇨🇦 Canada (+1)", value: "+1-ca" },
-    { label: "🇮🇳 India (+91)", value: "+91" },
-    { label: "🇲🇽 Mexico (+52)", value: "+52" },
-  ]);
+  // Navigation state
+  const [currentTab, setCurrentTab] = useState("main"); // main, personal, security, notifications, feedback
+
+  // Reset to main screen when tab is double-pressed
+  useEffect(() => {
+    if (onTabPress) {
+      onTabPress(() => {
+        setCurrentTab("main");
+      });
+    }
+  }, [onTabPress]);
+
+  // Core profile states
+  const [countryCodeValue, setCountryCodeValue] = useState("+1-us");
   const [phone, setPhone] = useState("");
-  const [countryCodeOpen, setCountryCodeOpen] = useState(false);
+  const [profileImage, setProfileImage] = useState(null);
   const [errors, setErrors] = useState({});
   const [isLoading, setIsLoading] = useState(false);
 
-  // New states for enhanced features
-  const [profileImage, setProfileImage] = useState(null);
+  // Security states
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showPasswordSection, setShowPasswordSection] = useState(false);
-
-  // Notification preferences
-  const [emailNotifications, setEmailNotifications] = useState(true);
-  const [smsNotifications, setSmsNotifications] = useState(false);
-  const [pushNotifications, setPushNotifications] = useState(true);
-  const [marketingEmails, setMarketingEmails] = useState(false);
-
-  // Privacy settings
-  const [profileVisibility, setProfileVisibility] = useState("public");
-  const [dataSharing, setDataSharing] = useState(false);
   const [twoFactorAuth, setTwoFactorAuth] = useState(false);
 
-  // App preferences
-  const [darkMode, setDarkMode] = useState(false);
-  const [language, setLanguage] = useState("en");
-  const [languageOpen, setLanguageOpen] = useState(false);
-  const [languages] = useState([
-    { label: "🇺🇸 English", value: "en" },
-    { label: "🇪🇸 Español", value: "es" },
+  // Essential preferences
+  const [emailNotifications, setEmailNotifications] = useState(true);
+  const [pushNotifications, setPushNotifications] = useState(true);
+  const [smsNotifications, setSmsNotifications] = useState(false);
+  // darkMode now comes from props
+
+  // Authentication state
+  const [isSignedIn, setIsSignedIn] = useState(true);
+
+  // Password visibility states
+  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+
+  // Dropdown states
+  const [countryCodeOpen, setCountryCodeOpen] = useState(false);
+  const [countryCode] = useState([
+    { label: "🇺🇸 United States (+1)", value: "+1-us" },
+    { label: "🇮🇳 India (+91)", value: "+91" },
+    { label: "🇨🇦 Canada (+1)", value: "+1-ca" },
+    { label: "🇲🇽 Mexico (+52)", value: "+52" },
   ]);
 
-  // Privacy options
-  const [privacyOpen, setPrivacyOpen] = useState(false);
-  const [privacyOptions] = useState([
-    { label: "🌐 Public", value: "public" },
-    { label: "👥 Friends Only", value: "friends" },
-    { label: "🔒 Private", value: "private" },
-  ]);
-
-  // Modal states
-  const [showImagePicker, setShowImagePicker] = useState(false);
-  const [showAccountActivity, setShowAccountActivity] = useState(false);
-
-  // Mock account activity data
-  const [accountActivity] = useState([
-    {
-      date: "2025-06-18",
-      action: "Login",
-      device: "iPhone 15",
-      location: "Bensalem, PA",
-    },
-    {
-      date: "2025-06-17",
-      action: "Profile Updated",
-      device: "MacBook Pro",
-      location: "Bensalem, PA",
-    },
-    {
-      date: "2025-06-16",
-      action: "Password Changed",
-      device: "iPhone 15",
-      location: "Bensalem, PA",
-    },
-  ]);
-
-  // Existing validation functions
-  const validateEmail = (email) => {
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    return emailRegex.test(email);
-  };
-
-  const validateName = (name) => {
-    return name.trim().length >= 2;
-  };
-
+  // Validation functions
+  const validateEmail = (email) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+  const validateName = (name) => name.trim().length >= 2;
   const validatePhone = (phoneNumber) => {
     const cleaned = phoneNumber.replace(/\D/g, "");
     return cleaned.length >= 10 && cleaned.length <= 15;
   };
+  const validatePassword = (password) =>
+    password.length >= 8 && /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/.test(password);
 
-  // New validation functions
-  const validatePassword = (password) => {
-    return (
-      password.length >= 8 && /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/.test(password)
-    );
-  };
+  // Input handlers with real-time validation
+  const handleNameChange = useCallback(
+    (text) => {
+      setProfileName(text);
+      if (errors.name && validateName(text)) {
+        setErrors((prev) => ({ ...prev, name: null }));
+      }
+    },
+    [errors.name, setProfileName]
+  );
 
-  const validatePasswordMatch = (password, confirm) => {
-    return password === confirm;
-  };
+  const handleEmailChange = useCallback(
+    (text) => {
+      setProfileEmail(text);
+      if (errors.email && validateEmail(text)) {
+        setErrors((prev) => ({ ...prev, email: null }));
+      }
+    },
+    [errors.email, setProfileEmail]
+  );
 
-  // Existing handlers
-  const handleNameChange = (text) => {
-    setProfileName(text);
-    if (errors.name && validateName(text)) {
-      setErrors((prev) => ({ ...prev, name: null }));
-    }
-  };
+  const handlePhoneChange = useCallback(
+    (text) => {
+      const cleaned = text.replace(/\D/g, "");
+      let formattedText = cleaned;
+      if (cleaned.length > 6) {
+        formattedText = `${cleaned.slice(0, 3)}-${cleaned.slice(
+          3,
+          6
+        )}-${cleaned.slice(6, 10)}`;
+      } else if (cleaned.length > 3) {
+        formattedText = `${cleaned.slice(0, 3)}-${cleaned.slice(3)}`;
+      }
+      setPhone(formattedText);
+      if (errors.phone && validatePhone(cleaned)) {
+        setErrors((prev) => ({ ...prev, phone: null }));
+      }
+    },
+    [errors.phone]
+  );
 
-  const handleEmailChange = (text) => {
-    setProfileEmail(text);
-    if (errors.email && validateEmail(text)) {
-      setErrors((prev) => ({ ...prev, email: null }));
-    }
-  };
-
-  const handlePhoneChange = (text) => {
-    const cleaned = text.replace(/\D/g, "");
-    let formattedText = cleaned;
-    if (cleaned.length > 6) {
-      formattedText = `${cleaned.slice(0, 3)}-${cleaned.slice(
-        3,
-        6
-      )}-${cleaned.slice(6, 10)}`;
-    } else if (cleaned.length > 3) {
-      formattedText = `${cleaned.slice(0, 3)}-${cleaned.slice(3)}`;
-    }
-    setPhone(formattedText);
-    if (errors.phone && validatePhone(cleaned)) {
-      setErrors((prev) => ({ ...prev, phone: null }));
-    }
-  };
-
-  // Image Picker Functions (Adapted from BillsScreen.js)
-  const pickImage = async () => {
-    let result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images, // Use MediaTypeOptions.Images
-      allowsEditing: true,
-      aspect: [4, 3],
-      quality: 1,
-    });
-
-    console.log(result);
-
-    if (!result.canceled) {
-      setProfileImage(result.assets[0].uri);
-    }
-  };
-
-  const launchCamera = async () => {
+  // Image handling
+  const requestPermissions = async () => {
     const { status: cameraStatus } =
       await ImagePicker.requestCameraPermissionsAsync();
     const { status: mediaStatus } =
@@ -185,109 +139,91 @@ export default function ProfileScreen({
     if (cameraStatus !== "granted" || mediaStatus !== "granted") {
       Alert.alert(
         "Permissions Required",
-        "Please grant camera and media permissions to use this feature."
+        "Camera and photo library access are needed to update your profile picture."
       );
-      return null;
+      return false;
     }
+    return true;
+  };
+
+  const launchCamera = async () => {
+    if (!(await requestPermissions())) return;
 
     try {
       const result = await ImagePicker.launchCameraAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images, // Use MediaTypeOptions.Images
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
         allowsEditing: true,
-        aspect: [4, 3],
+        aspect: [1, 1],
         quality: 0.8,
       });
 
-      if (!result.canceled && result.assets && result.assets.length > 0) {
-        setProfileImage(result.assets[0].uri); // Set the profile image
-      } else {
-        return null;
+      if (!result.canceled && result.assets?.[0]) {
+        setProfileImage(result.assets[0].uri);
       }
     } catch (error) {
-      console.error("Camera launch failed:", error);
-      Alert.alert("Error", "Unable to launch camera. Please try again.");
-      return null;
+      Alert.alert("Error", "Unable to access camera. Please try again.");
     }
   };
 
-  const handleImagePicker = () => {
-    const options = {
-      mediaType: "photo",
-      maxWidth: 800,
-      maxHeight: 600,
-      quality: 0.7,
-      includeBase64: false,
-      selectionLimit: 1,
-    };
+  const pickImage = async () => {
+    if (!(await requestPermissions())) return;
 
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.8,
+      });
+
+      if (!result.canceled && result.assets?.[0]) {
+        setProfileImage(result.assets[0].uri);
+      }
+    } catch (error) {
+      Alert.alert("Error", "Unable to access photo library. Please try again.");
+    }
+  };
+
+  const handleImagePicker = useCallback(() => {
     if (Platform.OS === "ios") {
       ActionSheetIOS.showActionSheetWithOptions(
         {
-          options: ["Cancel", "Take Photo", "Choose from Library"],
+          options: [
+            "Cancel",
+            "Take Photo",
+            "Choose from Library",
+            "Remove Photo",
+          ],
           cancelButtonIndex: 0,
+          destructiveButtonIndex: profileImage ? 3 : -1,
         },
         (buttonIndex) => {
-          if (buttonIndex === 1) {
-            launchCamera();
-          } else if (buttonIndex === 2) {
-            pickImage();
-          }
+          if (buttonIndex === 1) launchCamera();
+          else if (buttonIndex === 2) pickImage();
+          else if (buttonIndex === 3) setProfileImage(null);
         }
       );
     } else {
-      Alert.alert("Add Photo", "Choose an option to add a photo:", [
-        {
-          text: "Cancel",
-          style: "cancel",
-        },
-        {
-          text: "Take Photo",
-          onPress: () => {
-            launchCamera();
-          },
-        },
-        {
-          text: "Choose from Library",
-          onPress: () => {
-            pickImage(); // Use pickImage for Android library
-          },
-        },
-      ]);
+      const options = [
+        { text: "Cancel", style: "cancel" },
+        { text: "Take Photo", onPress: launchCamera },
+        { text: "Choose from Library", onPress: pickImage },
+      ];
+
+      if (profileImage) {
+        options.push({
+          text: "Remove Photo",
+          onPress: () => setProfileImage(null),
+          style: "destructive",
+        });
+      }
+
+      Alert.alert("Profile Picture", "Choose an option:", options);
     }
-  };
+  }, [profileImage]);
 
-  const handleClearPhoto = () => {
-    setProfileImage(null);
-  };
-
-  const handlePasswordChange = () => {
-    const newErrors = {};
-
-    if (!currentPassword) {
-      newErrors.currentPassword = "Current password is required";
-    }
-
-    if (!validatePassword(newPassword)) {
-      newErrors.newPassword =
-        "Password must be 8+ characters with uppercase, lowercase, and number";
-    }
-
-    if (!validatePasswordMatch(newPassword, confirmPassword)) {
-      newErrors.confirmPassword = "Passwords do not match";
-    }
-
-    setErrors(newErrors);
-
-    if (Object.keys(newErrors).length === 0) {
-      Alert.alert("Success", "Password updated successfully!");
-      setCurrentPassword("");
-      setNewPassword("");
-      setConfirmPassword("");
-      setShowPasswordSection(false);
-    }
-  };
-
-  const handleTwoFactorToggle = (value) => {
+  // Two-factor authentication handler
+  const handleTwoFactorToggle = useCallback((value) => {
     setTwoFactorAuth(value);
     if (value) {
       Alert.alert(
@@ -302,65 +238,182 @@ export default function ProfileScreen({
           },
         ]
       );
+    } else {
+      Alert.alert(
+        "Disable Two-Factor Authentication",
+        "Are you sure you want to disable this security feature?",
+        [
+          { text: "Cancel", onPress: () => setTwoFactorAuth(true) },
+          {
+            text: "Disable",
+            style: "destructive",
+            onPress: () =>
+              Alert.alert(
+                "Disabled",
+                "Two-factor authentication has been disabled."
+              ),
+          },
+        ]
+      );
     }
-  };
+  }, []);
 
-  const handleDataExport = () => {
-    Alert.alert(
-      "Export Data",
-      "Your data will be compiled and sent to your email address within 24 hours.",
-      [
-        { text: "Cancel" },
-        {
-          text: "Export",
-          onPress: () =>
-            Alert.alert("Success", "Data export request submitted!"),
+  // Password change handler
+  const handlePasswordChange = useCallback(() => {
+    const newErrors = {};
+
+    if (!currentPassword)
+      newErrors.currentPassword = "Current password is required";
+    if (!validatePassword(newPassword)) {
+      newErrors.newPassword =
+        "Password must be 8+ characters with uppercase, lowercase, and number";
+    }
+    if (newPassword !== confirmPassword) {
+      newErrors.confirmPassword = "Passwords do not match";
+    }
+
+    setErrors(newErrors);
+
+    if (Object.keys(newErrors).length === 0) {
+      Alert.alert("Success", "Password updated successfully!");
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
+      setShowPasswordSection(false);
+    }
+  }, [currentPassword, newPassword, confirmPassword]);
+
+  // Authentication handlers
+  const handleSignOut = useCallback(() => {
+    Alert.alert("Sign Out", "Are you sure you want to sign out?", [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Sign Out",
+        style: "destructive",
+        onPress: () => {
+          setIsSignedIn(false);
+          Alert.alert("Signed Out", "You have been successfully signed out.");
         },
-      ]
-    );
-  };
+      },
+    ]);
+  }, []);
 
-  const handleDeleteAccount = () => {
+  const handleSignIn = useCallback(() => {
+    Alert.alert("Sign In", "Redirecting to sign in page...", [
+      {
+        text: "OK",
+        onPress: () => {
+          setIsSignedIn(true);
+          Alert.alert("Welcome Back!", "You have been successfully signed in.");
+        },
+      },
+    ]);
+  }, []);
+
+  const handleDeleteAccount = useCallback(() => {
     Alert.alert(
       "Delete Account",
       "This action cannot be undone. All your data will be permanently deleted.",
       [
-        { text: "Cancel" },
+        { text: "Cancel", style: "cancel" },
         {
           text: "Delete",
           style: "destructive",
-          onPress: () =>
+          onPress: () => {
             Alert.alert(
-              "Account Deletion",
-              "Account deletion request submitted."
-            ),
+              "Account Deleted",
+              "Your account has been permanently deleted.",
+              [
+                {
+                  text: "OK",
+                  onPress: () => {
+                    // Here you would typically navigate to login screen
+                    setIsSignedIn(false);
+                  },
+                },
+              ]
+            );
+          },
         },
       ]
     );
-  };
+  }, []);
 
-  // Enhanced validation
-  const validateForm = () => {
+  // Feedback handlers
+  const handleRateApp = useCallback(() => {
+    Alert.alert(
+      "Rate BillBuddy",
+      "Help us improve by rating BillBuddy on the app store!",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Rate Now",
+          onPress: () => {
+            // In a real app, this would open the app store
+            const appStoreUrl =
+              Platform.OS === "ios"
+                ? "https://apps.apple.com/app/billbuddy"
+                : "https://play.google.com/store/apps/details?id=com.billbuddy";
+
+            Linking.openURL(appStoreUrl).catch(() => {
+              Alert.alert("Success", "Thank you for your feedback! ⭐⭐⭐⭐⭐");
+            });
+          },
+        },
+      ]
+    );
+  }, []);
+
+  const handleContactUs = useCallback(() => {
+    Alert.alert(
+      "Contact Us",
+      "How would you like to contact our support team?",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Email",
+          onPress: () => {
+            const emailUrl =
+              "mailto:support@billbuddy.com?subject=App Support Request";
+            Linking.openURL(emailUrl).catch(() => {
+              Alert.alert("Info", "Please email us at: support@billbuddy.com");
+            });
+          },
+        },
+        {
+          text: "Phone",
+          onPress: () => {
+            const phoneUrl = "tel:+1-800-BILLBUDDY";
+            Linking.openURL(phoneUrl).catch(() => {
+              Alert.alert("Info", "Please call us at: 1-800-BILLBUDDY");
+            });
+          },
+        },
+      ]
+    );
+  }, []);
+
+  // Form validation and save
+  const validateForm = useCallback(() => {
     const newErrors = {};
 
     if (!validateName(profileName)) {
-      newErrors.name = "Name must be at least 2 characters long";
+      newErrors.name = "Name must be at least 2 characters";
     }
-
     if (!validateEmail(profileEmail)) {
       newErrors.email = "Please enter a valid email address";
     }
-
-    if (!validatePhone(phone)) {
-      newErrors.phone = "Phone number must be 10-15 digits";
+    if (!phone) {
+      newErrors.phone = "Phone number is required";
+    } else if (!validatePhone(phone)) {
+      newErrors.phone = "Please enter a valid phone number";
     }
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
-  };
+  }, [profileName, profileEmail, phone]);
 
-  // Enhanced save profile
-  const handleSaveProfile = async () => {
+  const handleSaveProfile = useCallback(async () => {
     if (!validateForm()) {
       Alert.alert("Validation Error", "Please fix the errors before saving.");
       return;
@@ -370,526 +423,829 @@ export default function ProfileScreen({
 
     try {
       await new Promise((resolve) => setTimeout(resolve, 1000));
-      Alert.alert("Success", "Profile updated successfully!", [{ text: "OK" }]);
+      Alert.alert("Success", "Profile updated successfully!");
     } catch (error) {
       Alert.alert("Error", "Failed to update profile. Please try again.");
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [validateForm]);
 
-  const renderError = (error) => {
-    if (!error) return null;
-    return <Text style={styles.errorText}>{error}</Text>;
-  };
-
-  const getDisplayCountryCode = () => {
-    if (!countryCodeValue) {
-      return countryCode.length > 0 ? countryCode[0].value.split("-")[0] : "";
-    }
-    return countryCodeValue.includes("-")
+  const getDisplayCountryCode = useCallback(() => {
+    return countryCodeValue?.includes("-")
       ? countryCodeValue.split("-")[0]
-      : countryCodeValue;
-  };
+      : countryCodeValue || "+1";
+  }, [countryCodeValue]);
 
-  const renderSection = (title, children) => (
-    <View style={styles.section}>
-      <Text style={styles.sectionTitle}>{title}</Text>
-      {children}
-    </View>
-  );
+  const getInitials = useCallback(() => {
+    const names = profileName.trim().split(" ");
+    return (
+      names
+        .map((name) => name[0]?.toUpperCase())
+        .join("")
+        .slice(0, 2) || "U"
+    );
+  }, [profileName]);
 
-  const renderToggleOption = (title, subtitle, value, onValueChange) => (
-    <View style={styles.toggleOption}>
-      <View style={styles.toggleTextContainer}>
-        <Text style={styles.toggleTitle}>{title}</Text>
-        {subtitle && <Text style={styles.toggleSubtitle}>{subtitle}</Text>}
-      </View>
-      <Switch
-        value={value}
-        onValueChange={onValueChange}
-        trackColor={{ false: "#ddd", true: "#2356A8" }}
-        thumbColor={value ? "#fff" : "#f4f3f4"}
-      />
-    </View>
-  );
+  const getWelcomeMessage = useCallback(() => {
+    const firstName = profileName.trim().split(" ")[0] || "User";
+    const greetings = ["Hello", "Welcome", "Hi there"];
+    const randomGreeting =
+      greetings[Math.floor(Math.random() * greetings.length)];
+    return `${randomGreeting}, ${firstName}! 👋`;
+  }, [profileName]);
 
-  const renderActionButton = (
-    title,
-    subtitle,
-    onPress,
-    color = "#2356A8",
-    textColor = "#fff"
-  ) => (
-    <TouchableOpacity
-      style={[styles.actionButton, { backgroundColor: color }]}
-      onPress={onPress}
-    >
-      <View>
-        <Text style={[styles.actionButtonTitle, { color: textColor }]}>
-          {title}
+  // Navigation functions
+  const goToPersonal = () => setCurrentTab("personal");
+  const goToSecurity = () => setCurrentTab("security");
+  const goToNotifications = () => setCurrentTab("notifications");
+  const goToFeedback = () => setCurrentTab("feedback");
+  const goBack = () => setCurrentTab("main");
+
+  // Render different screens based on current tab
+  const renderMainScreen = () => (
+    <>
+      {/* Header */}
+      <View style={styles.header}>
+        <Text style={[styles.title, darkMode && styles.darkTitleText]}>
+          Profile Screen
         </Text>
-        {subtitle && (
-          <Text
-            style={[
-              styles.actionButtonSubtitle,
-              { color: textColor, opacity: 0.8 },
-            ]}
-          >
-            {subtitle}
+        <Text style={[styles.subtitle, darkMode && styles.darkSubtext]}>
+          Manage your account information
+        </Text>
+      </View>
+
+      {/* Profile Picture Section */}
+      <View style={styles.profileSection}>
+        <Pressable
+          onPress={handleImagePicker}
+          style={styles.profileImageContainer}
+        >
+          {profileImage ? (
+            <Image source={{ uri: profileImage }} style={styles.profileImage} />
+          ) : (
+            <View
+              style={[
+                styles.profileImagePlaceholder,
+                darkMode && styles.darkPlaceholder,
+              ]}
+            >
+              <Text style={styles.profileImageText}>{getInitials()}</Text>
+            </View>
+          )}
+          <View style={styles.cameraIcon}>
+            <Text style={styles.cameraEmoji}>📷</Text>
+          </View>
+        </Pressable>
+        <Text style={[styles.profileImageHint, darkMode && styles.darkSubtext]}>
+          Tap to change profile picture
+        </Text>
+      </View>
+
+      {/* Welcome Message */}
+      <Text
+        style={[styles.welcomeMessage, darkMode && styles.darkWelcomeMessage]}
+      >
+        {getWelcomeMessage()}
+      </Text>
+
+      {/* Navigation Menu */}
+      <View style={styles.menuContainer}>
+        <TouchableOpacity
+          style={[styles.menuItem, darkMode && styles.darkMenuitem]}
+          onPress={goToPersonal}
+        >
+          <View style={styles.menuIconContainer}>
+            <Text style={styles.menuIcon}>👤</Text>
+          </View>
+          <View style={styles.menuTextContainer}>
+            <Text style={[styles.menuTitle, darkMode && styles.darkText]}>
+              Personal Information
+            </Text>
+            <Text style={[styles.menuSubtitle, darkMode && styles.darkSubtext]}>
+              Name, email, phone number
+            </Text>
+          </View>
+          <Text style={[styles.chevron, darkMode && styles.darkText]}>›</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.menuItem, darkMode && styles.darkMenuitem]}
+          onPress={goToSecurity}
+        >
+          <View style={styles.menuIconContainer}>
+            <Text style={styles.menuIcon}>🔒</Text>
+          </View>
+          <View style={styles.menuTextContainer}>
+            <Text style={[styles.menuTitle, darkMode && styles.darkText]}>
+              Security & Privacy
+            </Text>
+            <Text style={[styles.menuSubtitle, darkMode && styles.darkSubtext]}>
+              Password, two-factor authentication
+            </Text>
+          </View>
+          <Text style={[styles.chevron, darkMode && styles.darkText]}>›</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.menuItem, darkMode && styles.darkMenuitem]}
+          onPress={goToNotifications}
+        >
+          <View style={styles.menuIconContainer}>
+            <Text style={styles.menuIcon}>🔔</Text>
+          </View>
+          <View style={styles.menuTextContainer}>
+            <Text style={[styles.menuTitle, darkMode && styles.darkText]}>
+              Notifications & Preferences
+            </Text>
+            <Text style={[styles.menuSubtitle, darkMode && styles.darkSubtext]}>
+              Email, SMS, push notifications, dark mode
+            </Text>
+          </View>
+          <Text style={[styles.chevron, darkMode && styles.darkText]}>›</Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* {Feedback Section} */}
+      <TouchableOpacity
+        style={[styles.menuItem, darkMode && styles.darkMenuitem]}
+        onPress={goToFeedback}
+      >
+        <View style={styles.menuIconContainer}>
+          <Text style={styles.menuIcon}>💬</Text>
+        </View>
+        <View style={styles.menuTextContainer}>
+          <Text style={[styles.menuTitle, darkMode && styles.darkText]}>
+            Feedback & Support
           </Text>
+          <Text style={[styles.menuSubtitle, darkMode && styles.darkSubtext]}>
+            Rate app, contact us, help center
+          </Text>
+        </View>
+        <Text style={[styles.chevron, darkMode && styles.darkText]}>›</Text>
+      </TouchableOpacity>
+
+      {/* Authentication Section */}
+      <View style={styles.authSection}>
+        {isSignedIn ? (
+          <TouchableOpacity
+            style={[styles.authButton, styles.signOutButton]}
+            onPress={handleSignOut}
+          >
+            <Text style={styles.signOutButtonText}>🚪 Sign Out</Text>
+          </TouchableOpacity>
+        ) : (
+          <TouchableOpacity
+            style={[styles.authButton, styles.signInButton]}
+            onPress={handleSignIn}
+          >
+            <Text style={styles.signInButtonText}>🔐 Sign In</Text>
+          </TouchableOpacity>
         )}
       </View>
-    </TouchableOpacity>
+    </>
+  );
+
+  const renderPersonalScreen = () => (
+    <>
+      {/* Header with Back Button */}
+      <View style={styles.subHeader}>
+        <TouchableOpacity style={styles.backButton} onPress={goBack}>
+          <View style={styles.chevronCircle}>
+            <Ionicons
+              name="chevron-back-circle-outline"
+              size={30}
+              color={darkMode ? "#D69E2E" : "#8B4513"}
+              style={{ marginTop: 5 }}
+            />
+          </View>
+        </TouchableOpacity>
+        <Text style={[styles.subTitle, darkMode && styles.darksubTitle]}>
+          Personal Information
+        </Text>
+      </View>
+
+      <View
+        style={[styles.formContainer, darkMode && styles.darkFormContainer]}
+      >
+        <View style={styles.inputGroup}>
+          <Text style={[styles.label, darkMode && styles.darkText]}>
+            Full Name *
+          </Text>
+          <TextInput
+            placeholder="Enter your full name"
+            placeholderTextColor={darkMode ? "#A0AEC0" : "#999"}
+            value={profileName}
+            onChangeText={handleNameChange}
+            style={[
+              styles.input,
+              darkMode && styles.darkInput,
+              errors.name && styles.inputError,
+            ]}
+            autoCapitalize="words"
+            autoCorrect={false}
+          />
+          {errors.name && <Text style={styles.errorText}>{errors.name}</Text>}
+        </View>
+
+        <View style={styles.inputGroup}>
+          <Text style={[styles.label, darkMode && styles.darkText]}>
+            Email Address *
+          </Text>
+          <TextInput
+            placeholder="Enter your email address"
+            placeholderTextColor={darkMode ? "#A0AEC0" : "#999"}
+            value={profileEmail}
+            onChangeText={handleEmailChange}
+            style={[
+              styles.input,
+              darkMode && styles.darkInput,
+              errors.email && styles.inputError,
+            ]}
+            keyboardType="email-address"
+            autoCapitalize="none"
+            autoCorrect={false}
+          />
+          {errors.email && <Text style={styles.errorText}>{errors.email}</Text>}
+        </View>
+
+        <View
+          style={[styles.inputGroup, { zIndex: countryCodeOpen ? 1000 : 1 }]}
+        >
+          <Text style={[styles.label, darkMode && styles.darkText]}>
+            Country Code
+          </Text>
+          <DropDownPicker
+            open={countryCodeOpen}
+            value={countryCodeValue}
+            items={countryCode}
+            setOpen={setCountryCodeOpen}
+            setValue={setCountryCodeValue}
+            setItems={() => {}}
+            onOpen={() => setCountryCodeOpen(true)}
+            onClose={() => setCountryCodeOpen(false)}
+            style={[styles.dropdown, darkMode && styles.darkDropdown]}
+            dropDownContainerStyle={[
+              styles.dropdownContainer,
+              darkMode && styles.darkDropdownContainer,
+            ]}
+            textStyle={[styles.dropdownText, darkMode && styles.darkText]}
+            placeholderStyle={[
+              styles.dropdownPlaceholder,
+              darkMode && styles.darkText,
+            ]}
+            placeholder="Select country code"
+            searchable={true}
+            searchPlaceholder="Search countries..."
+            searchTextInputStyle={[
+              styles.searchInput,
+              darkMode && styles.darkSearchInput,
+            ]}
+            searchContainerStyle={[
+              styles.searchContainer,
+              darkMode && styles.darkSearchContainer,
+            ]}
+            listMode="SCROLLVIEW"
+            scrollViewProps={{
+              nestedScrollEnabled: true,
+              showsVerticalScrollIndicator: true,
+              bounces: true,
+              decelerationRate: "fast",
+            }}
+            maxHeight={200}
+            itemSeparator={true}
+            itemSeparatorStyle={styles.itemSeparator}
+            dropDownDirection="AUTO"
+            zIndex={1000}
+            zIndexInverse={1000}
+          />
+        </View>
+
+        <View style={styles.inputGroup}>
+          <Text style={[styles.label, darkMode && styles.darkText]}>
+            Phone Number *
+          </Text>
+          <View style={[styles.phoneContainer, darkMode && styles.darkInput]}>
+            <Text
+              style={[styles.countryCodeDisplay, darkMode && styles.darkText]}
+            >
+              {getDisplayCountryCode()}
+            </Text>
+            <TextInput
+              placeholder="Enter phone number"
+              placeholderTextColor={darkMode ? "#A0AEC0" : "#999"}
+              value={phone}
+              onChangeText={handlePhoneChange}
+              style={[
+                styles.phoneInput,
+                darkMode && styles.darkText,
+                errors.phone && styles.inputError,
+              ]}
+              keyboardType="phone-pad"
+              maxLength={12}
+            />
+          </View>
+          {errors.phone && <Text style={styles.errorText}>{errors.phone}</Text>}
+        </View>
+
+        <TouchableOpacity
+          style={[styles.saveButton, isLoading && styles.saveButtonDisabled]}
+          onPress={handleSaveProfile}
+          disabled={isLoading}
+        >
+          <Text style={styles.saveButtonText}>
+            {isLoading ? "Saving..." : "Save Changes"}
+          </Text>
+        </TouchableOpacity>
+      </View>
+    </>
+  );
+
+  const renderSecurityScreen = () => (
+    <>
+      {/* Header with Back Button */}
+      <View style={styles.subHeader}>
+        <TouchableOpacity style={styles.backButton} onPress={goBack}>
+          <View style={styles.chevronCircle}>
+            <Ionicons
+              name="chevron-back-circle-outline"
+              size={30}
+              color={darkMode ? "#D69E2E" : "#8B4513"}
+              style={{ marginTop: 5 }}
+            />
+          </View>
+        </TouchableOpacity>
+        <Text style={[styles.subTitle, darkMode && styles.darksubTitle]}>
+          Security & Privacy
+        </Text>
+      </View>
+
+      <View
+        style={[styles.formContainer, darkMode && styles.darkFormContainer]}
+      >
+        {/* Two-Factor Authentication */}
+        <View style={styles.preferenceRow}>
+          <View style={styles.preferenceInfo}>
+            <Text style={[styles.preferenceTitle, darkMode && styles.darkText]}>
+              Two-Factor Authentication
+            </Text>
+            <Text
+              style={[
+                styles.preferenceSubtitle,
+                darkMode && styles.darkSubtext,
+              ]}
+            >
+              Add an extra layer of security to your account
+            </Text>
+          </View>
+          <Switch
+            value={twoFactorAuth}
+            onValueChange={handleTwoFactorToggle}
+            trackColor={{
+              false: "#ddd",
+              true: darkMode ? "#D69E2E" : "#8B4513",
+            }}
+            thumbColor="#fff"
+          />
+        </View>
+
+        {/* Password Change Section */}
+        <View style={styles.passwordSection}>
+          <TouchableOpacity
+            style={styles.passwordToggle}
+            onPress={() => setShowPasswordSection(!showPasswordSection)}
+          >
+            <Text
+              style={[
+                styles.passwordToggleText,
+                darkMode && { color: "#D69E2E" },
+              ]}
+            >
+              {showPasswordSection
+                ? "Cancel Password Change"
+                : "Change Password"}
+            </Text>
+          </TouchableOpacity>
+
+          {showPasswordSection && (
+            <>
+              <View style={styles.inputGroup}>
+                <Text style={[styles.label, darkMode && styles.darkText]}>
+                  Current Password *
+                </Text>
+                <View
+                  style={[
+                    styles.passwordInputContainer,
+                    darkMode && styles.darkInput,
+                  ]}
+                >
+                  <TextInput
+                    placeholder="Enter current password"
+                    placeholderTextColor={darkMode ? "#A0AEC0" : "#999"}
+                    value={currentPassword}
+                    onChangeText={setCurrentPassword}
+                    style={[
+                      styles.passwordInput,
+                      darkMode && styles.darkText,
+                      errors.currentPassword && styles.inputError,
+                    ]}
+                    secureTextEntry={!showCurrentPassword}
+                    autoCapitalize="none"
+                  />
+                  <TouchableOpacity
+                    style={styles.eyeIcon}
+                    onPress={() => setShowCurrentPassword(!showCurrentPassword)}
+                  >
+                    <Text style={styles.eyeIconText}>
+                      {showCurrentPassword ? "🙈" : "👁️"}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+                {errors.currentPassword && (
+                  <Text style={styles.errorText}>{errors.currentPassword}</Text>
+                )}
+              </View>
+
+              <View style={styles.inputGroup}>
+                <Text style={[styles.label, darkMode && styles.darkText]}>
+                  New Password *
+                </Text>
+                <View
+                  style={[
+                    styles.passwordInputContainer,
+                    darkMode && styles.darkInput,
+                  ]}
+                >
+                  <TextInput
+                    placeholder="Enter new password"
+                    placeholderTextColor={darkMode ? "#A0AEC0" : "#999"}
+                    value={newPassword}
+                    onChangeText={setNewPassword}
+                    style={[
+                      styles.passwordInput,
+                      darkMode && styles.darkText,
+                      errors.newPassword && styles.inputError,
+                    ]}
+                    secureTextEntry={!showNewPassword}
+                    autoCapitalize="none"
+                  />
+                  <TouchableOpacity
+                    style={styles.eyeIcon}
+                    onPress={() => setShowNewPassword(!showNewPassword)}
+                  >
+                    <Text style={styles.eyeIconText}>
+                      {showNewPassword ? "🙈" : "👁️"}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+                {errors.newPassword && (
+                  <Text style={styles.errorText}>{errors.newPassword}</Text>
+                )}
+              </View>
+
+              <View style={styles.inputGroup}>
+                <Text style={[styles.label, darkMode && styles.darkText]}>
+                  Confirm New Password *
+                </Text>
+                <View
+                  style={[
+                    styles.passwordInputContainer,
+                    darkMode && styles.darkInput,
+                  ]}
+                >
+                  <TextInput
+                    placeholder="Confirm new password"
+                    placeholderTextColor={darkMode ? "#A0AEC0" : "#999"}
+                    value={confirmPassword}
+                    onChangeText={setConfirmPassword}
+                    style={[
+                      styles.passwordInput,
+                      darkMode && styles.darkText,
+                      errors.confirmPassword && styles.inputError,
+                    ]}
+                    secureTextEntry={!showConfirmPassword}
+                    autoCapitalize="none"
+                  />
+                  <TouchableOpacity
+                    style={styles.eyeIcon}
+                    onPress={() => setShowConfirmPassword(!showConfirmPassword)}
+                  >
+                    <Text style={styles.eyeIconText}>
+                      {showConfirmPassword ? "🙈" : "👁️"}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+                {errors.confirmPassword && (
+                  <Text style={styles.errorText}>{errors.confirmPassword}</Text>
+                )}
+              </View>
+
+              <TouchableOpacity
+                style={[
+                  styles.passwordButton,
+                  darkMode && { backgroundColor: "#D69E2E" },
+                ]}
+                onPress={handlePasswordChange}
+              >
+                <Text style={styles.passwordButtonText}>Update Password</Text>
+              </TouchableOpacity>
+            </>
+          )}
+        </View>
+      </View>
+    </>
+  );
+
+  const renderNotificationsScreen = () => (
+    <>
+      {/* Header with Back Button */}
+      <View style={styles.subHeader}>
+        <TouchableOpacity style={styles.backButton} onPress={goBack}>
+          <View style={styles.chevronCircle}>
+            <Ionicons
+              name="chevron-back-circle-outline"
+              size={30}
+              color={darkMode ? "#D69E2E" : "#8B4513"}
+              style={{ marginTop: 5 }}
+            />
+          </View>
+        </TouchableOpacity>
+        <Text style={[styles.subTitle, darkMode && styles.darksubTitle]}>
+          Notifications & Preferences
+        </Text>
+      </View>
+
+      <View
+        style={[styles.formContainer, darkMode && styles.darkFormContainer]}
+      >
+        <View style={styles.preferenceRow}>
+          <View style={styles.preferenceInfo}>
+            <Text style={[styles.preferenceTitle, darkMode && styles.darkText]}>
+              Email Notifications
+            </Text>
+            <Text
+              style={[
+                styles.preferenceSubtitle,
+                darkMode && styles.darkSubtext,
+              ]}
+            >
+              Receive important updates via email
+            </Text>
+          </View>
+          <Switch
+            value={emailNotifications}
+            onValueChange={setEmailNotifications}
+            trackColor={{
+              false: "#ddd",
+              true: darkMode ? "#D69E2E" : "#8B4513",
+            }}
+            thumbColor="#fff"
+          />
+        </View>
+
+        <View style={styles.preferenceRow}>
+          <View style={styles.preferenceInfo}>
+            <Text style={[styles.preferenceTitle, darkMode && styles.darkText]}>
+              SMS Notifications
+            </Text>
+            <Text
+              style={[
+                styles.preferenceSubtitle,
+                darkMode && styles.darkSubtext,
+              ]}
+            >
+              Receive alerts via text message to your phone
+            </Text>
+          </View>
+          <Switch
+            value={smsNotifications}
+            onValueChange={setSmsNotifications}
+            trackColor={{
+              false: "#ddd",
+              true: darkMode ? "#D69E2E" : "#8B4513",
+            }}
+            thumbColor="#fff"
+          />
+        </View>
+
+        <View style={styles.preferenceRow}>
+          <View style={styles.preferenceInfo}>
+            <Text style={[styles.preferenceTitle, darkMode && styles.darkText]}>
+              Push Notifications
+            </Text>
+            <Text
+              style={[
+                styles.preferenceSubtitle,
+                darkMode && styles.darkSubtext,
+              ]}
+            >
+              Receive alerts on your device
+            </Text>
+          </View>
+          <Switch
+            value={pushNotifications}
+            onValueChange={setPushNotifications}
+            trackColor={{
+              false: "#ddd",
+              true: darkMode ? "#D69E2E" : "#8B4513",
+            }}
+            thumbColor="#fff"
+          />
+        </View>
+
+        <View style={styles.preferenceRow}>
+          <View style={styles.preferenceInfo}>
+            <Text style={[styles.preferenceTitle, darkMode && styles.darkText]}>
+              Dark Mode
+            </Text>
+            <Text
+              style={[
+                styles.preferenceSubtitle,
+                darkMode && styles.darkSubtext,
+              ]}
+            >
+              Use dark theme for better viewing
+            </Text>
+          </View>
+          <Switch
+            value={darkMode}
+            onValueChange={setDarkMode}
+            trackColor={{
+              false: "#ddd",
+              true: darkMode ? "#D69E2E" : "#8B4513",
+            }}
+            thumbColor="#fff"
+          />
+        </View>
+      </View>
+    </>
+  );
+
+  const renderFeedbackScreen = () => (
+    <>
+      {/* Header with Back Button */}
+      <View style={styles.subHeader}>
+        <TouchableOpacity style={styles.backButton} onPress={goBack}>
+          <View style={styles.chevronCircle}>
+            <Ionicons
+              name="chevron-back-circle-outline"
+              size={30}
+              color={darkMode ? "#D69E2E" : "#8B4513"}
+              style={{ marginTop: 5 }}
+            />
+          </View>
+        </TouchableOpacity>
+        <Text style={[styles.subTitle, darkMode && styles.darksubTitle]}>
+          Feedback & Support
+        </Text>
+      </View>
+
+      <View
+        style={[styles.formContainer, darkMode && styles.darkFormContainer]}
+      >
+        {/* Rate BillBuddy */}
+        <TouchableOpacity
+          style={[styles.feedbackOption, darkMode && styles.darkFeedbackOption]}
+          onPress={handleRateApp}
+        >
+          <View
+            style={[
+              styles.feedbackIconContainer,
+              darkMode && styles.darkFeedbackIconContainer,
+            ]}
+          >
+            <Text style={styles.feedbackIcon}>⭐</Text>
+          </View>
+          <View style={styles.feedbackTextContainer}>
+            <Text style={[styles.feedbackTitle, darkMode && styles.darkText]}>
+              Rate BillBuddy
+            </Text>
+            <Text
+              style={[styles.feedbackSubtitle, darkMode && styles.darkSubtext]}
+            >
+              Help us improve by rating our app
+            </Text>
+          </View>
+          <Text style={[styles.chevron, darkMode && styles.darkText]}>›</Text>
+        </TouchableOpacity>
+
+        {/* Contact Us */}
+        <TouchableOpacity
+          style={[styles.feedbackOption, darkMode && styles.darkFeedbackOption]}
+          onPress={handleContactUs}
+        >
+          <View
+            style={[
+              styles.feedbackIconContainer,
+              darkMode && styles.darkFeedbackIconContainer,
+            ]}
+          >
+            <Text style={styles.feedbackIcon}>📞</Text>
+          </View>
+          <View style={styles.feedbackTextContainer}>
+            <Text style={[styles.feedbackTitle, darkMode && styles.darkText]}>
+              Contact Us
+            </Text>
+            <Text
+              style={[styles.feedbackSubtitle, darkMode && styles.darkSubtext]}
+            >
+              Get help from our support team
+            </Text>
+          </View>
+          <Text style={[styles.chevron, darkMode && styles.darkText]}>›</Text>
+        </TouchableOpacity>
+
+        {/* Help Center */}
+        <TouchableOpacity
+          style={[styles.feedbackOption, darkMode && styles.darkFeedbackOption]}
+          onPress={() =>
+            Alert.alert(
+              "Help Center",
+              "Visit our help center for FAQs and tutorials."
+            )
+          }
+        >
+          <View
+            style={[
+              styles.feedbackIconContainer,
+              darkMode && styles.darkFeedbackIconContainer,
+            ]}
+          >
+            <Text style={styles.feedbackIcon}>❓</Text>
+          </View>
+          <View style={styles.feedbackTextContainer}>
+            <Text style={[styles.feedbackTitle, darkMode && styles.darkText]}>
+              Help Center
+            </Text>
+            <Text
+              style={[styles.feedbackSubtitle, darkMode && styles.darkSubtext]}
+            >
+              FAQs, tutorials, and guides
+            </Text>
+          </View>
+          <Text style={[styles.chevron, darkMode && styles.darkText]}>›</Text>
+        </TouchableOpacity>
+
+        {/* Bug Report */}
+        <TouchableOpacity
+          style={[styles.feedbackOption, darkMode && styles.darkFeedbackOption]}
+          onPress={() =>
+            Alert.alert(
+              "Bug Report",
+              "Found a bug? Let us know and we'll fix it quickly!"
+            )
+          }
+        >
+          <View
+            style={[
+              styles.feedbackIconContainer,
+              darkMode && styles.darkFeedbackIconContainer,
+            ]}
+          >
+            <Text style={styles.feedbackIcon}>🐛</Text>
+          </View>
+          <View style={styles.feedbackTextContainer}>
+            <Text style={[styles.feedbackTitle, darkMode && styles.darkText]}>
+              Report a Bug
+            </Text>
+            <Text
+              style={[styles.feedbackSubtitle, darkMode && styles.darkSubtext]}
+            >
+              Let us know about any issues
+            </Text>
+          </View>
+          <Text style={[styles.chevron, darkMode && styles.darkText]}>›</Text>
+        </TouchableOpacity>
+      </View>
+      {/* Add this after the </View> that closes formContainer */}
+      <TouchableOpacity
+        style={[styles.authButton, styles.deleteAccountButton]}
+        onPress={handleDeleteAccount}
+      >
+        <Text style={styles.deleteAccountButtonText}>🗑️ Delete Account</Text>
+      </TouchableOpacity>
+    </>
   );
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={[styles.container, darkMode && styles.darkContainer]}>
       <KeyboardAvoidingView
         behavior={Platform.OS === "ios" ? "padding" : "height"}
         style={styles.keyboardAvoid}
       >
-        <View style={styles.content}>
-          <View style={styles.header}>
-            <Text style={styles.title}>Account Settings</Text>
-            <Text style={styles.subtitle}>
-              Manage your account and preferences
-            </Text>
-          </View>
-
-          <ScrollView
-            style={styles.formScrollView}
-            contentContainerStyle={styles.formScrollContent}
-            showsVerticalScrollIndicator={false}
-            nestedScrollEnabled={true}
-          >
-            {/* Profile Photo Upload Field */}
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Profile Photo</Text>
-              {profileImage ? (
-                <View style={styles.imagePreviewContainer}>
-                  <Image
-                    source={{ uri: profileImage }}
-                    style={styles.imagePreview}
-                  />
-                  <Pressable
-                    style={styles.clearImageButton}
-                    onPress={handleClearPhoto}
-                  >
-                    <Text style={styles.clearImageButtonText}>Clear Photo</Text>
-                  </Pressable>
-                </View>
-              ) : (
-                <Pressable
-                  style={styles.imagePickerButton}
-                  onPress={handleImagePicker}
-                >
-                  <Text style={styles.imagePickerButtonText}>
-                    🖼️ Upload Profile Picture
-                  </Text>
-                </Pressable>
-              )}
-            </View>
-
-            {/* Personal Information */}
-            {renderSection(
-              "Personal Information",
-              <>
-                <View style={styles.inputContainer}>
-                  <Text style={styles.label}>Full Name *</Text>
-                  <TextInput
-                    placeholder="Enter your full name"
-                    value={profileName}
-                    onChangeText={handleNameChange}
-                    style={[styles.input, errors.name && styles.inputError]}
-                    autoCapitalize="words"
-                    autoCorrect={false}
-                  />
-                  {renderError(errors.name)}
-                </View>
-
-                <View style={styles.inputContainer}>
-                  <Text style={styles.label}>Email Address *</Text>
-                  <TextInput
-                    placeholder="Enter your email address"
-                    value={profileEmail}
-                    onChangeText={handleEmailChange}
-                    style={[styles.input, errors.email && styles.inputError]}
-                    keyboardType="email-address"
-                    autoCapitalize="none"
-                    autoCorrect={false}
-                  />
-                  {renderError(errors.email)}
-                </View>
-
-                <View
-                  style={[
-                    styles.inputContainer,
-                    { zIndex: countryCodeOpen ? 5000 : 1 },
-                  ]}
-                >
-                  <Text style={styles.label}>Country Code</Text>
-                  <DropDownPicker
-                    open={countryCodeOpen}
-                    value={countryCodeValue}
-                    items={countryCode}
-                    setOpen={setCountryCodeOpen}
-                    setValue={setCountryCodeValue}
-                    setItems={setCountryCode}
-                    style={styles.dropdown}
-                    dropDownContainerStyle={styles.dropdownContainer}
-                    textStyle={styles.dropdownText}
-                    placeholder="Select country code"
-                    searchable={false}
-                    zIndex={5000}
-                    zIndexInverse={1000}
-                    listMode="SCROLLVIEW"
-                    scrollViewProps={{ nestedScrollEnabled: true }}
-                    onOpen={() => setCountryCodeOpen(true)}
-                    onClose={() => setCountryCodeOpen(false)}
-                  />
-                </View>
-
-                <View style={styles.inputContainer}>
-                  <Text style={styles.label}>Phone Number *</Text>
-                  <View style={styles.phoneContainer}>
-                    <Text style={styles.countryCodeDisplay}>
-                      {getDisplayCountryCode()}
-                    </Text>
-                    <TextInput
-                      placeholder="Enter phone number"
-                      value={phone}
-                      onChangeText={handlePhoneChange}
-                      style={[
-                        styles.phoneInput,
-                        errors.phone && styles.inputError,
-                      ]}
-                      keyboardType="phone-pad"
-                      maxLength={12}
-                    />
-                  </View>
-                  {renderError(errors.phone)}
-                </View>
-              </>
-            )}
-
-            {/* Password Section */}
-            {renderSection(
-              "Security",
-              <>
-                <TouchableOpacity
-                  style={styles.passwordToggle}
-                  onPress={() => setShowPasswordSection(!showPasswordSection)}
-                >
-                  <Text style={styles.passwordToggleText}>
-                    {showPasswordSection
-                      ? "Cancel Password Change"
-                      : "Change Password"}
-                  </Text>
-                </TouchableOpacity>
-
-                {showPasswordSection && (
-                  <>
-                    <View style={styles.inputContainer}>
-                      <Text style={styles.label}>Current Password *</Text>
-                      <TextInput
-                        placeholder="Enter current password"
-                        value={currentPassword}
-                        onChangeText={setCurrentPassword}
-                        style={[
-                          styles.input,
-                          errors.currentPassword && styles.inputError,
-                        ]}
-                        secureTextEntry
-                        autoCapitalize="none"
-                      />
-                      {renderError(errors.currentPassword)}
-                    </View>
-
-                    <View style={styles.inputContainer}>
-                      <Text style={styles.label}>New Password *</Text>
-                      <TextInput
-                        placeholder="Enter new password"
-                        value={newPassword}
-                        onChangeText={setNewPassword}
-                        style={[
-                          styles.input,
-                          errors.newPassword && styles.inputError,
-                        ]}
-                        secureTextEntry
-                        autoCapitalize="none"
-                      />
-                      {renderError(errors.newPassword)}
-                    </View>
-
-                    <View style={styles.inputContainer}>
-                      <Text style={styles.label}>Confirm New Password *</Text>
-                      <TextInput
-                        placeholder="Confirm new password"
-                        value={confirmPassword}
-                        onChangeText={setConfirmPassword}
-                        style={[
-                          styles.input,
-                          errors.confirmPassword && styles.inputError,
-                        ]}
-                        secureTextEntry
-                        autoCapitalize="none"
-                      />
-                      {renderError(errors.confirmPassword)}
-                    </View>
-
-                    <TouchableOpacity
-                      style={styles.passwordButton}
-                      onPress={handlePasswordChange}
-                    >
-                      <Text style={styles.passwordButtonText}>
-                        Update Password
-                      </Text>
-                    </TouchableOpacity>
-                  </>
-                )}
-
-                {renderToggleOption(
-                  "Two-Factor Authentication",
-                  "Add an extra layer of security to your account",
-                  twoFactorAuth,
-                  handleTwoFactorToggle
-                )}
-              </>
-            )}
-
-            {/* Notification Preferences */}
-            {renderSection(
-              "Notification Preferences",
-              <>
-                {renderToggleOption(
-                  "Email Notifications",
-                  "Receive important updates via email",
-                  emailNotifications,
-                  setEmailNotifications
-                )}
-                {renderToggleOption(
-                  "SMS Notifications",
-                  "Receive alerts via text message",
-                  smsNotifications,
-                  setSmsNotifications
-                )}
-                {renderToggleOption(
-                  "Push Notifications",
-                  "Receive push notifications on your device",
-                  pushNotifications,
-                  setPushNotifications
-                )}
-                {renderToggleOption(
-                  "Marketing Emails",
-                  "Receive promotional offers and updates",
-                  marketingEmails,
-                  setMarketingEmails
-                )}
-              </>
-            )}
-
-            {/* Privacy Settings */}
-            {renderSection(
-              "Privacy & Visibility",
-              <>
-                <View
-                  style={[
-                    styles.inputContainer,
-                    { zIndex: privacyOpen ? 4000 : 1 },
-                  ]}
-                >
-                  <Text style={styles.label}>Profile Visibility</Text>
-                  <DropDownPicker
-                    open={privacyOpen}
-                    value={profileVisibility}
-                    items={privacyOptions}
-                    setOpen={setPrivacyOpen}
-                    setValue={setProfileVisibility}
-                    setItems={() => {}} // Static items
-                    style={styles.dropdown}
-                    dropDownContainerStyle={[
-                      styles.dropdownContainer,
-                      { zIndex: 4000 },
-                    ]}
-                    textStyle={styles.dropdownText}
-                    placeholder="Select privacy level"
-                    searchable={false}
-                    zIndex={4000}
-                    zIndexInverse={1000}
-                  />
-                </View>
-
-                {renderToggleOption(
-                  "Data Sharing",
-                  "Allow us to share anonymized data for analytics",
-                  dataSharing,
-                  setDataSharing
-                )}
-              </>
-            )}
-
-            {/* App Preferences */}
-            {renderSection(
-              "App Preferences",
-              <>
-                <View
-                  style={[
-                    styles.inputContainer,
-                    { zIndex: languageOpen ? 3000 : 1 },
-                  ]}
-                >
-                  <Text style={styles.label}>Language</Text>
-                  <DropDownPicker
-                    open={languageOpen}
-                    value={language}
-                    items={languages}
-                    setOpen={setLanguageOpen}
-                    setValue={setLanguage}
-                    setItems={() => {}} // Static items
-                    style={styles.dropdown}
-                    dropDownContainerStyle={[
-                      styles.dropdownContainer,
-                      { zIndex: 3000 },
-                    ]}
-                    textStyle={styles.dropdownText}
-                    placeholder="Select language"
-                    searchable={false}
-                    zIndex={3000}
-                    zIndexInverse={1000}
-                  />
-                </View>
-
-                {renderToggleOption(
-                  "Dark Mode",
-                  "Switch between light and dark theme",
-                  darkMode,
-                  setDarkMode
-                )}
-              </>
-            )}
-
-            {/* Account Management */}
-            {renderSection(
-              "Account Management",
-              <>
-                {renderActionButton(
-                  "Account Activity",
-                  "View recent login history",
-                  () => setShowAccountActivity(true)
-                )}
-                {renderActionButton(
-                  "Export Data",
-                  "Download a copy of your data",
-                  handleDataExport
-                )}
-                {renderActionButton(
-                  "Contact Support",
-                  "Get help with your account",
-                  () =>
-                    Alert.alert(
-                      "Support",
-                      "Email: support@example.com\nPhone: 1-800-SUPPORT"
-                    )
-                )}
-                {renderActionButton(
-                  "Delete Account",
-                  "Permanently delete your account",
-                  handleDeleteAccount,
-                  "#e74c3c",
-                  "#fff"
-                )}
-              </>
-            )}
-
-            {/* Save Button */}
-            <TouchableOpacity
-              style={[
-                styles.saveButton,
-                isLoading && styles.saveButtonDisabled,
-              ]}
-              onPress={handleSaveProfile}
-              disabled={isLoading}
-            >
-              <Text style={styles.saveButtonText}>
-                {isLoading ? "Saving..." : "Save Profile"}
-              </Text>
-            </TouchableOpacity>
-          </ScrollView>
-        </View>
-
-        {/* Image Picker Modal */}
-        <Modal
-          visible={showImagePicker}
-          transparent={true}
-          animationType="slide"
-          onRequestClose={() => setShowImagePicker(false)}
+        <ScrollView
+          style={styles.scrollView}
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          nestedScrollEnabled={true}
         >
-          <View style={styles.modalOverlay}>
-            <View style={styles.modalContent}>
-              <Text style={styles.modalTitle}>Change Profile Picture</Text>
-              <TouchableOpacity
-                style={styles.modalButton}
-                onPress={() => handleImagePick("camera")}
-              >
-                <Text style={styles.modalButtonText}>📷 Take Photo</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.modalButton}
-                onPress={() => handleImagePick("gallery")}
-              >
-                <Text style={styles.modalButtonText}>
-                  🖼️ Choose from Gallery
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.modalButton, styles.modalCancelButton]}
-                onPress={() => setShowImagePicker(false)}
-              >
-                <Text style={[styles.modalButtonText, styles.modalCancelText]}>
-                  Cancel
-                </Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </Modal>
-
-        {/* Account Activity Modal */}
-        <Modal
-          visible={showAccountActivity}
-          transparent={true}
-          animationType="slide"
-          onRequestClose={() => setShowAccountActivity(false)}
-        >
-          <View style={styles.modalOverlay}>
-            <View style={[styles.modalContent, styles.activityModal]}>
-              <View style={styles.modalHeader}>
-                <Text style={styles.modalTitle}>Account Activity</Text>
-                <TouchableOpacity
-                  onPress={() => setShowAccountActivity(false)}
-                  style={styles.closeButton}
-                >
-                  <Text style={styles.closeButtonText}>✕</Text>
-                </TouchableOpacity>
-              </View>
-              <ScrollView style={styles.activityList}>
-                {accountActivity.map((activity, index) => (
-                  <View key={index} style={styles.activityItem}>
-                    <View style={styles.activityInfo}>
-                      <Text style={styles.activityAction}>
-                        {activity.action}
-                      </Text>
-                      <Text style={styles.activityDetails}>
-                        {activity.device} • {activity.location}
-                      </Text>
-                      <Text style={styles.activityDate}>{activity.date}</Text>
-                    </View>
-                  </View>
-                ))}
-              </ScrollView>
-            </View>
-          </View>
-        </Modal>
+          {currentTab === "main" && renderMainScreen()}
+          {currentTab === "personal" && renderPersonalScreen()}
+          {currentTab === "security" && renderSecurityScreen()}
+          {currentTab === "notifications" && renderNotificationsScreen()}
+          {currentTab === "feedback" && renderFeedbackScreen()}
+        </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -900,429 +1256,548 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "#EFE4D2",
   },
+  darkContainer: {
+    backgroundColor: "#1A1A1A",
+  },
   keyboardAvoid: {
     flex: 1,
   },
-  content: {
+  scrollView: {
     flex: 1,
+  },
+  scrollContent: {
     padding: 20,
+    paddingBottom: 40,
   },
-  formScrollView: {
-    flex: 1,
-  },
-  formScrollContent: {
-    flexGrow: 1,
-    paddingBottom: 50,
-  },
+
+  // Header
   header: {
     alignItems: "center",
-    marginBottom: 32,
+    marginBottom: 30,
   },
   title: {
-    fontSize: 32,
-    fontWeight: "bold",
-    color: "#2356A8",
-    marginBottom: 8,
+    fontSize: 28,
+    fontWeight: "700",
+    color: "#8B4513", // Brown theme from Bills screen
+    marginBottom: 6,
   },
   subtitle: {
     fontSize: 16,
-    color: "#666",
+    color: "#6B7280",
     textAlign: "center",
   },
 
-  // Section Styles
-  section: {
-    marginBottom: 32,
+  // Sub Headers
+  subHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    display: "flex",
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 30,
   },
-  sectionTitle: {
-    fontSize: 20,
-    fontWeight: "bold",
-    color: "#2356A8",
-    marginBottom: 16,
-    borderBottomWidth: 2,
-    borderBottomColor: "#2356A8",
-    paddingBottom: 8,
+  backButton: {
+    flexDirection: "row",
+    alignItems: "center",
   },
 
-  // Profile Image Styles
-  profileImageSection: {
+  chevronCircle: {
+    width: 35,
+    height: 35,
+    borderRadius: 20,
+    justifyContent: "center",
+    display: "flex",
     alignItems: "center",
-    marginBottom: 20,
+  },
+
+  chevronText: {
+    fontSize: 18,
+    color: "#8B4513",
+    fontWeight: "bold",
+  },
+
+  backText: {
+    marginLeft: 8,
+    fontSize: 16,
+    color: "#8B4513",
+    fontWeight: "600",
+  },
+  subTitle: {
+    fontSize: 24,
+    fontWeight: "700",
+    color: "#8B4513",
+    textAlign: "center",
+    flex: 1,
+  },
+  darksubTitle: {
+    color: "#D69E2E", // Gold color for dark mode
+  },
+
+  // Profile Picture
+  profileSection: {
+    alignItems: "center",
+    marginBottom: 32,
   },
   profileImageContainer: {
     position: "relative",
     marginBottom: 12,
   },
   profileImage: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
+    width: 125,
+    height: 125,
+    borderRadius: 75,
     backgroundColor: "#fff",
-    borderWidth: 4,
-    borderColor: "#2356A8",
+    borderWidth: 3,
+    borderColor: "#8B4513",
   },
   profileImagePlaceholder: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
-    backgroundColor: "#2356A8",
-    justifyContent: "center",
-    alignItems: "center",
-    borderWidth: 4,
-    borderColor: "#fff",
-  },
-  profileImageText: {
-    fontSize: 48,
-    fontWeight: "bold",
-    color: "#fff",
-  },
-  cameraIconContainer: {
-    position: "absolute",
-    bottom: 0,
-    right: 0,
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: "#2356A8",
+    width: 125,
+    height: 125,
+    borderRadius: 75,
+    backgroundColor: "#8B4513",
     justifyContent: "center",
     alignItems: "center",
     borderWidth: 3,
+    bottom: 10,
     borderColor: "#fff",
   },
+  darkPlaceholder: {
+    backgroundColor: "#4A5568",
+  },
+  profileImageText: {
+    fontSize: 32,
+    fontWeight: "700",
+    color: "#fff",
+    alignContent: "center",
+  },
   cameraIcon: {
-    fontSize: 16,
+    position: "absolute",
+    bottom: 2,
+    right: 2,
+    width: 32,
+    height: 32,
+    borderRadius: 40,
+    backgroundColor: "#8B4513",
+    justifyContent: "center",
+    alignItems: "center",
+    borderWidth: 2,
+    bottom: 20,
+    borderColor: "#fff",
+  },
+  cameraEmoji: {
+    fontSize: 14,
   },
   profileImageHint: {
     fontSize: 14,
-    color: "#666",
+    color: "#6B7280",
     textAlign: "center",
   },
 
-  // Form Styles (existing)
-  inputContainer: {
+  // Menu Items
+  menuContainer: {
+    marginBottom: 1,
+  },
+  menuItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#fff",
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 12,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 4,
+    bottom: 5,
+  },
+  darkMenuitem: {
+    backgroundColor: "#2D3748",
+  },
+  menuIconContainer: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    backgroundColor: "#F3F4F6",
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: 16,
+  },
+  menuIcon: {
+    fontSize: 24,
+  },
+  menuTextContainer: {
+    flex: 1,
+  },
+  menuTitle: {
+    fontSize: 18,
+    fontWeight: "600",
+    color: "#374151",
+    marginBottom: 4,
+  },
+  menuSubtitle: {
+    fontSize: 14,
+    color: "#6B7280",
+  },
+  chevron: {
+    fontSize: 24,
+    color: "#9CA3AF",
+    fontWeight: "300",
+  },
+
+  // Form Container
+  formContainer: {
+    backgroundColor: "#fff",
+    borderRadius: 16,
+    padding: 20,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  darkFormContainer: {
+    backgroundColor: "#2D3748",
+  },
+
+  // Form Elements
+  inputGroup: {
     marginBottom: 20,
   },
   label: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: "600",
-    color: "#2356A8",
+    color: "#374151",
     marginBottom: 8,
   },
   input: {
     borderWidth: 1,
-    borderColor: "#ddd",
+    borderColor: "#D1D5DB",
     borderRadius: 12,
     padding: 16,
     backgroundColor: "#fff",
     fontSize: 16,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
+    color: "#374151",
+  },
+  darkInput: {
+    backgroundColor: "#2D3748",
+    borderColor: "#4A5568",
+    color: "#E2E8F0",
   },
   inputError: {
-    borderColor: "#e74c3c",
+    borderColor: "#EF4444",
     borderWidth: 2,
   },
   errorText: {
-    color: "#e74c3c",
+    color: "#EF4444",
     fontSize: 14,
-    marginTop: 4,
+    marginTop: 6,
     marginLeft: 4,
   },
 
-  // Dropdown Styles (existing)
-  dropdown: {
-    borderWidth: 1,
-    borderColor: "#ddd",
-    borderRadius: 12,
-    backgroundColor: "#fff",
-    paddingHorizontal: 16,
-    minHeight: 54,
-  },
-  dropdownContainer: {
-    borderWidth: 1,
-    borderColor: "#ddd",
-    borderRadius: 12,
-    backgroundColor: "#fff",
-  },
-  dropdownText: {
-    fontSize: 16,
-  },
+  // Phone Input
   phoneContainer: {
     flexDirection: "row",
     alignItems: "center",
     borderWidth: 1,
-    borderColor: "#ddd",
+    borderColor: "#D1D5DB",
     borderRadius: 12,
     backgroundColor: "#fff",
-    shadowColor: "#000",
-    shadowOffset: {
-      width: 0,
-      height: 1,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
   },
   countryCodeDisplay: {
     fontSize: 16,
     fontWeight: "600",
-    color: "#2356A8",
+    color: "#8B4513",
     paddingLeft: 16,
     paddingRight: 12,
     borderRightWidth: 1,
-    borderRightColor: "#eee",
+    borderRightColor: "#E5E7EB",
   },
   phoneInput: {
     flex: 1,
     padding: 16,
     fontSize: 16,
+    color: "#374151",
   },
 
-  // Security Section Styles
+  // Dropdown
+  dropdown: {
+    borderWidth: 1,
+    borderColor: "#D1D5DB",
+    borderRadius: 12,
+    backgroundColor: "#fff",
+    paddingHorizontal: 16,
+    minHeight: 54,
+  },
+  darkDropdown: {
+    backgroundColor: "#2D3748",
+    borderColor: "#4A5568",
+  },
+  dropdownContainer: {
+    borderWidth: 1,
+    borderColor: "#D1D5DB",
+    borderRadius: 12,
+    backgroundColor: "#fff",
+  },
+  darkDropdownContainer: {
+    backgroundColor: "#2D3748",
+    borderColor: "#4A5568",
+  },
+  dropdownText: {
+    fontSize: 16,
+    color: "#374151",
+  },
+  dropdownPlaceholder: {
+    fontSize: 16,
+    color: "#9CA3AF",
+  },
+  searchInput: {
+    borderWidth: 1,
+    borderColor: "#D1D5DB",
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    fontSize: 16,
+    backgroundColor: "#F9FAFB",
+    color: "#374151",
+  },
+  darkSearchInput: {
+    backgroundColor: "#1A202C",
+    borderColor: "#4A5568",
+    color: "#E2E8F0",
+  },
+  searchContainer: {
+    paddingHorizontal: 15,
+    paddingVertical: 10,
+    backgroundColor: "#fff",
+    borderBottomWidth: 1,
+    borderBottomColor: "#E5E7EB",
+  },
+  darkSearchContainer: {
+    backgroundColor: "#2D3748",
+    borderBottomColor: "#4A5568",
+  },
+  itemSeparator: {
+    height: 1,
+    backgroundColor: "#E5E7EB",
+  },
+
+  // Password Section
+  passwordSection: {
+    marginTop: 16,
+  },
   passwordToggle: {
     alignSelf: "flex-start",
     marginBottom: 16,
     paddingVertical: 8,
-    paddingHorizontal: 0,
   },
   passwordToggleText: {
-    color: "#2356A8",
+    color: "#8B4513",
     fontSize: 16,
     fontWeight: "600",
     textDecorationLine: "underline",
   },
+  passwordInputContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#D1D5DB",
+    borderRadius: 12,
+    backgroundColor: "#fff",
+  },
+  passwordInput: {
+    flex: 1,
+    padding: 16,
+    fontSize: 16,
+    color: "#374151",
+  },
+  eyeIcon: {
+    padding: 16,
+    paddingLeft: 12,
+  },
+  eyeIconText: {
+    fontSize: 18,
+  },
   passwordButton: {
-    backgroundColor: "#2356A8",
+    backgroundColor: "#8B4513",
     borderRadius: 12,
     paddingVertical: 16,
     alignItems: "center",
-    marginTop: 10,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 3,
-    elevation: 2,
+    marginTop: 8,
   },
   passwordButtonText: {
     color: "#fff",
-    fontSize: 18,
-    fontWeight: "bold",
+    fontSize: 16,
+    fontWeight: "600",
   },
 
-  // Toggle Option Styles
-  toggleOption: {
+  // Preferences
+  preferenceRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    paddingVertical: 12,
+    paddingVertical: 16,
     borderBottomWidth: 1,
-    borderBottomColor: "#eee",
-    marginBottom: 8,
+    borderBottomColor: "#E5E7EB",
   },
-  toggleTextContainer: {
+  preferenceInfo: {
     flex: 1,
-    marginRight: 10,
+    marginRight: 16,
   },
-  toggleTitle: {
+  preferenceTitle: {
     fontSize: 16,
     fontWeight: "600",
-    color: "#333",
+    color: "#374151",
+    marginBottom: 4,
   },
-  toggleSubtitle: {
-    fontSize: 13,
-    color: "#777",
-    marginTop: 4,
-  },
-
-  // Action Button Styles
-  actionButton: {
-    borderRadius: 12,
-    paddingVertical: 16,
-    paddingHorizontal: 20,
-    alignItems: "flex-start",
-    marginBottom: 12,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 3,
-    elevation: 2,
-  },
-  actionButtonTitle: {
-    fontSize: 16,
-    fontWeight: "bold",
-  },
-  actionButtonSubtitle: {
-    fontSize: 13,
-    marginTop: 4,
+  preferenceSubtitle: {
+    fontSize: 14,
+    color: "#6B7280",
   },
 
-  // Save Button Styles
+  // Save Button
   saveButton: {
-    backgroundColor: "#4CAF50",
+    backgroundColor: "#10B981",
     borderRadius: 12,
     paddingVertical: 18,
     alignItems: "center",
     marginTop: 20,
-    shadowColor: "#4CAF50",
+    shadowColor: "#10B981",
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 8,
     elevation: 6,
+    bottom: 10,
   },
   saveButtonDisabled: {
-    backgroundColor: "#CCCCCC",
+    backgroundColor: "#9CA3AF",
     shadowOpacity: 0.1,
   },
   saveButtonText: {
     color: "#fff",
-    fontWeight: "bold",
+    fontWeight: "700",
     fontSize: 18,
     letterSpacing: 0.5,
   },
 
-  // Modal Styles
-  modalOverlay: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    backgroundColor: "rgba(0, 0, 0, 0.6)",
+  // Authentication Buttons
+  authSection: {
+    marginTop: 50,
   },
-  modalContent: {
-    backgroundColor: "#fff",
-    borderRadius: 16,
-    padding: 24,
-    width: "90%",
-    maxWidth: 400,
-    elevation: 8,
+  authButton: {
+    borderRadius: 12,
+    paddingVertical: 18,
+    alignItems: "center",
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.25,
+    shadowOpacity: 0.2,
     shadowRadius: 8,
-    alignItems: "center",
+    elevation: 6,
   },
-  modalTitle: {
-    fontSize: 24,
-    fontWeight: "bold",
-    marginBottom: 20,
-    color: "#2356A8",
-    textAlign: "center",
-  },
-  modalButton: {
+  signInButton: {
     backgroundColor: "#2356A8",
-    borderRadius: 10,
-    paddingVertical: 14,
-    width: "100%",
-    alignItems: "center",
-    marginBottom: 12,
+    bottom: 40,
   },
-  modalButtonText: {
+  signOutButton: {
+    backgroundColor: "#EF4444",
+    bottom: 40,
+  },
+  signInButtonText: {
     color: "#fff",
+    fontWeight: "700",
     fontSize: 18,
-    fontWeight: "600",
+    letterSpacing: 0.5,
   },
-  modalCancelButton: {
-    backgroundColor: "#ddd",
-  },
-  modalCancelText: {
-    color: "#333",
+  signOutButtonText: {
+    color: "#fff",
+    fontWeight: "700",
+    fontSize: 18,
+    letterSpacing: 0.5,
   },
 
-  // Account Activity Modal Specific Styles
-  activityModal: {
-    maxHeight: "80%",
-    paddingHorizontal: 0,
-    paddingTop: 10,
+  // Dark mode text
+  darkText: {
+    color: "#FFFFFF", // Pure white for maximum contrast
   },
-  modalHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    width: "100%",
-    paddingHorizontal: 24,
+  darkTitleText: {
+    color: "#D69E2E", // Gold color for headers in dark mode
+  },
+  darkSubtext: {
+    color: "#CBD5E0",
+  },
+
+  welcomeMessage: {
+    fontSize: 20,
+    fontWeight: "600",
+    color: "#8B4513",
     marginBottom: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: "#eee",
-    paddingBottom: 10,
+    marginTop: -15,
+    marginLeft: 10,
+    textAlign: "center",
   },
-  closeButton: {
-    padding: 8,
+  darkWelcomeMessage: {
+    color: "#D69E2E", // Gold color for welcome message in dark mode
+    fontSize: 20,
+    fontWeight: "600",
+    marginBottom: 20,
+    marginTop: -15,
+    marginLeft: 10,
+    textAlign: "center",
   },
-  closeButtonText: {
-    fontSize: 24,
-    color: "#666",
-  },
-  activityList: {
-    width: "100%",
-    paddingHorizontal: 24,
-  },
-  activityItem: {
+
+  // Feedback Options
+  feedbackOption: {
     flexDirection: "row",
     alignItems: "center",
-    paddingVertical: 15,
-    borderBottomWidth: 1,
-    borderBottomColor: "#eee",
+    backgroundColor: "#F9FAFB",
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
   },
-  activityInfo: {
+  darkFeedbackOption: {
+    backgroundColor: "#1A202C",
+    borderColor: "#4A5568",
+  },
+  feedbackIconContainer: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    backgroundColor: "#8B4513",
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: 16,
+  },
+  darkFeedbackIconContainer: {
+    backgroundColor: "#D69E2E",
+  },
+  feedbackIcon: {
+    fontSize: 24,
+  },
+  feedbackTextContainer: {
     flex: 1,
   },
-  activityAction: {
+  feedbackTitle: {
     fontSize: 16,
     fontWeight: "600",
-    color: "#333",
+    color: "#374151",
+    marginBottom: 4,
   },
-  activityDetails: {
+  feedbackSubtitle: {
     fontSize: 14,
-    color: "#666",
-    marginTop: 4,
+    color: "#6B7280",
   },
-  activityDate: {
-    fontSize: 12,
-    color: "#999",
-    marginTop: 4,
+
+  // Replace the delete account styles with these
+  deleteAccountButton: {
+    backgroundColor: "#EF4444",
+    marginTop: 20,
   },
-  // New styles for photo field (Copied and adapted from BillsScreen.js)
-  imagePickerButton: {
-    backgroundColor: "#673AB7", // Purple color
-    borderRadius: 12,
-    paddingVertical: 16,
-    alignItems: "center",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 3,
-    elevation: 2,
-    marginBottom: 15,
-  },
-  imagePickerButtonText: {
+  deleteAccountButtonText: {
     color: "#fff",
-    fontSize: 16,
-    fontWeight: "600",
-  },
-  imagePreviewContainer: {
-    alignItems: "center",
-    marginBottom: 10,
-  },
-  imagePreview: {
-    width: "100%",
-    height: 200,
-    borderRadius: 12,
-    resizeMode: "cover",
-    marginBottom: 10,
-    borderWidth: 1,
-    borderColor: "#E0E0E0",
-  },
-  clearImageButton: {
-    backgroundColor: "#F44336", // Red color
-    borderRadius: 8,
-    paddingVertical: 10,
-    paddingHorizontal: 15,
-  },
-  clearImageButtonText: {
-    color: "#fff",
-    fontSize: 14,
-    fontWeight: "bold",
+    fontWeight: "700",
+    fontSize: 18,
+    letterSpacing: 0.5,
   },
 });

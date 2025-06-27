@@ -10,6 +10,7 @@ export default function FriendsStackScreen({
   setFriends,
   bills,
   profileName,
+  darkMode = false, // Add darkMode prop
 }) {
   return (
     <Stack.Navigator screenOptions={{ headerShown: false }}>
@@ -21,6 +22,7 @@ export default function FriendsStackScreen({
             setFriends={setFriends}
             bills={bills}
             profileName={profileName}
+            darkMode={darkMode} // Pass darkMode
           />
         )}
       </Stack.Screen>
@@ -31,6 +33,7 @@ export default function FriendsStackScreen({
             bills={bills}
             profileName={profileName}
             friends={friends} // <-- IMPORTANT: Pass the friends list here
+            darkMode={darkMode} // Pass darkMode
           />
         )}
       </Stack.Screen>

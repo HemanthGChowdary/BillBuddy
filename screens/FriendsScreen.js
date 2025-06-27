@@ -33,6 +33,7 @@ const FriendItem = React.memo(
     animatedValue,
     balance,
     lastActivity,
+    darkMode = false, // Add darkMode prop
   }) => {
     const getBalanceText = (balance, name) => {
       if (Math.abs(balance) < 0.01) return "Settled up";
@@ -50,11 +51,11 @@ const FriendItem = React.memo(
     return (
       <Animated.View
         style={{
-          backgroundColor: "#fff",
+          backgroundColor: darkMode ? "#2D3748" : "#fff",
           borderRadius: 16,
           padding: 16,
           marginBottom: 12,
-          borderColor: "#e0e0e0",
+          borderColor: darkMode ? "#4A5568" : "#e0e0e0",
           borderWidth: 1,
           shadowColor: "#000",
           shadowOffset: { width: 0, height: 2 },
@@ -83,7 +84,7 @@ const FriendItem = React.memo(
                 width: 52,
                 height: 52,
                 borderRadius: 26,
-                backgroundColor: "#EFE4D2",
+                backgroundColor: darkMode ? "#4A5568" : "#EFE4D2",
                 justifyContent: "center",
                 alignItems: "center",
                 marginRight: 16,
@@ -99,7 +100,7 @@ const FriendItem = React.memo(
                 style={{
                   fontSize: 18,
                   fontWeight: "600",
-                  color: "#2356A8",
+                  color: darkMode ? "#D69E2E" : "#8B4513", // Gold in dark mode, brown in light mode
                   marginBottom: 2,
                 }}
                 numberOfLines={1}
@@ -119,7 +120,7 @@ const FriendItem = React.memo(
               </Text>
 
               {lastActivity && (
-                <Text style={{ fontSize: 12, color: "#999" }}>
+                <Text style={{ fontSize: 12, color: darkMode ? "#A0AEC0" : "#999" }}>
                   Last activity: {lastActivity}
                 </Text>
               )}
@@ -138,17 +139,23 @@ const FriendItem = React.memo(
           <Pressable
             onPress={() => onInvite(item)}
             style={({ pressed }) => ({
-              backgroundColor: pressed ? "#E8F5E8" : "#F1F8E9",
+              backgroundColor: pressed 
+                ? (darkMode ? "#2D4A34" : "#E8F5E8")
+                : (darkMode ? "#064E3B" : "#F1F8E9"),
               borderRadius: 8,
               paddingVertical: 8,
               paddingHorizontal: 12,
               flex: 1,
               alignItems: "center",
               borderWidth: 1,
-              borderColor: "#C8E6C9",
+              borderColor: darkMode ? "#065F46" : "#C8E6C9",
             })}
           >
-            <Text style={{ fontSize: 13, color: "#388E3C", fontWeight: "500" }}>
+            <Text style={{ 
+              fontSize: 13, 
+              color: darkMode ? "#81C784" : "#388E3C", 
+              fontWeight: "500" 
+            }}>
               Invite
             </Text>
           </Pressable>
@@ -156,17 +163,23 @@ const FriendItem = React.memo(
           <Pressable
             onPress={() => onEdit(item.name)}
             style={({ pressed }) => ({
-              backgroundColor: pressed ? "#E3F2FD" : "#F3F8FF",
+              backgroundColor: pressed 
+                ? (darkMode ? "#653807" : "#F8F4E8")
+                : (darkMode ? "#3D3D3D" : "#F8F4E8"),
               borderRadius: 8,
               paddingVertical: 8,
               paddingHorizontal: 12,
               flex: 1,
               alignItems: "center",
               borderWidth: 1,
-              borderColor: "#BBDEFB",
+              borderColor: darkMode ? "#D69E2E" : "#D4A574",
             })}
           >
-            <Text style={{ fontSize: 13, color: "#1976D2", fontWeight: "500" }}>
+            <Text style={{ 
+              fontSize: 13, 
+              color: darkMode ? "#D69E2E" : "#8B4513", // Gold in dark mode, brown in light mode
+              fontWeight: "500" 
+            }}>
               Edit
             </Text>
           </Pressable>
@@ -174,17 +187,23 @@ const FriendItem = React.memo(
           <Pressable
             onPress={() => onDelete(item.name)}
             style={({ pressed }) => ({
-              backgroundColor: pressed ? "#FFEBEE" : "#FFF5F5",
+              backgroundColor: pressed 
+                ? (darkMode ? "#4A2D32" : "#FFEBEE")
+                : (darkMode ? "#4A2D32" : "#FFF5F5"),
               borderRadius: 8,
               paddingVertical: 8,
               paddingHorizontal: 12,
               flex: 1,
               alignItems: "center",
               borderWidth: 1,
-              borderColor: "#FFCDD2",
+              borderColor: darkMode ? "#F44336" : "#FFCDD2",
             })}
           >
-            <Text style={{ fontSize: 13, color: "#D32F2F", fontWeight: "500" }}>
+            <Text style={{ 
+              fontSize: 13, 
+              color: darkMode ? "#EF5350" : "#D32F2F", 
+              fontWeight: "500" 
+            }}>
               Delete
             </Text>
           </Pressable>
@@ -200,6 +219,7 @@ const FriendsScreen = ({
   navigation,
   bills,
   profileName,
+  darkMode = false, // Add darkMode prop
 }) => {
   const [friend, setFriend] = useState("");
   const [emoji, setEmoji] = useState("");
@@ -212,7 +232,7 @@ const FriendsScreen = ({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
   const [sortBy, setSortBy] = useState("name"); // name, balance, activity
-  const [filterBy, setFilterBy] = useState("all"); // all, settled, owes
+  const [filterBy, setFilterBy] = useState("all"); // all, settled, owes, recent, highBalance
 
   // Animation for list items
   const animatedValue = useState(new Animated.Value(0))[0];
@@ -285,6 +305,13 @@ const FriendsScreen = ({
             return Math.abs(balance) < 0.01;
           case "owes":
             return Math.abs(balance) >= 0.01;
+          case "recent":
+            // Show friends with activity in last 30 days
+            const thirtyDaysAgo = Date.now() - (30 * 24 * 60 * 60 * 1000);
+            return (friend.lastActivity || 0) > thirtyDaysAgo;
+          case "highBalance":
+            // Show friends with balance >= $20
+            return Math.abs(balance) >= 20;
           default:
             return true;
         }
@@ -594,6 +621,7 @@ const FriendsScreen = ({
             ? new Date(item.lastActivity).toLocaleDateString()
             : null
         }
+        darkMode={darkMode} // Pass darkMode prop
       />
     ),
     [
@@ -634,12 +662,16 @@ const FriendsScreen = ({
 
   if (isLoading) {
     return (
-      <SafeAreaView style={{ flex: 1, backgroundColor: "#EFE4D2" }}>
+      <SafeAreaView style={{ flex: 1, backgroundColor: darkMode ? "#1A1A1A" : "#EFE4D2" }}>
         <View
           style={{ flex: 1, justifyContent: "center", alignItems: "center" }}
         >
-          <ActivityIndicator size="large" color="#1976d2" />
-          <Text style={{ marginTop: 16, fontSize: 16, color: "#666" }}>
+          <ActivityIndicator size="large" color={darkMode ? "#D69E2E" : "#8B4513"} />
+          <Text style={{ 
+            marginTop: 16, 
+            fontSize: 16, 
+            color: darkMode ? "#CBD5E0" : "#666" 
+          }}>
             Loading friends...
           </Text>
         </View>
@@ -648,7 +680,7 @@ const FriendsScreen = ({
   }
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: "#EFE4D2" }}>
+    <SafeAreaView style={{ flex: 1, backgroundColor: darkMode ? "#1A1A1A" : "#EFE4D2" }}>
       <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
         <View style={{ flex: 1 }}>
           {/* Header */}
@@ -662,14 +694,20 @@ const FriendsScreen = ({
               }}
             >
               <Text
-                style={{ fontSize: 28, fontWeight: "bold", color: "#2356A8" }}
+                style={{ 
+                  fontSize: 28, 
+                  fontWeight: "bold", 
+                  color: darkMode ? "#D69E2E" : "#8B4513" // Gold in dark mode, brown in light mode
+                }}
               >
                 Friends
               </Text>
               <Pressable
                 onPress={() => setShowAddModal(true)}
                 style={({ pressed }) => ({
-                  backgroundColor: pressed ? "#1565C0" : "#1976d2",
+                  backgroundColor: pressed 
+                    ? (darkMode ? "#B7791F" : "#6B3409")
+                    : (darkMode ? "#D69E2E" : "#8B4513"), // Gold in dark mode, brown in light mode
                   borderRadius: 24,
                   paddingHorizontal: 16,
                   paddingVertical: 8,
@@ -692,7 +730,7 @@ const FriendsScreen = ({
               <View style={{ flexDirection: "row", gap: 12 }}>
                 <View
                   style={{
-                    backgroundColor: "#fff",
+                    backgroundColor: darkMode ? "#2D3748" : "#fff",
                     borderRadius: 12,
                     padding: 12,
                     minWidth: 100,
@@ -703,62 +741,66 @@ const FriendsScreen = ({
                     style={{
                       fontSize: 18,
                       fontWeight: "bold",
-                      color: "#2356A8",
+                      color: darkMode ? "#D69E2E" : "#8B4513",
                     }}
                   >
                     {summaryStats.totalFriends}
                   </Text>
-                  <Text style={{ fontSize: 12, color: "#666" }}>
+                  <Text style={{ fontSize: 12, color: darkMode ? "#CBD5E0" : "#666" }}>
                     Total Friends
                   </Text>
                 </View>
 
-                {summaryStats.totalOwed > 0 && (
-                  <View
-                    style={{
-                      backgroundColor: "#fff",
+                {(summaryStats.totalOwed > 0 || summaryStats.totalOwe > 0) && (
+                  <Pressable
+                    onPress={() => {
+                      // TODO: Navigate to detailed balance breakdown
+                      Alert.alert(
+                        "Balance Breakdown", 
+                        `You are owed: $${summaryStats.totalOwed.toFixed(2)}\nYou owe: $${summaryStats.totalOwe.toFixed(2)}\n\nTap on individual friends to see detailed breakdowns.`,
+                        [{ text: "OK" }]
+                      );
+                    }}
+                    style={({ pressed }) => ({
+                      backgroundColor: pressed 
+                        ? (darkMode ? "#374151" : "#f5f5f5")
+                        : (darkMode ? "#2D3748" : "#fff"),
                       borderRadius: 12,
                       padding: 12,
-                      minWidth: 100,
+                      minWidth: 140,
                       alignItems: "center",
-                    }}
+                    })}
                   >
-                    <Text
-                      style={{
-                        fontSize: 18,
-                        fontWeight: "bold",
-                        color: "#4CAF50",
-                      }}
-                    >
-                      ${summaryStats.totalOwed.toFixed(2)}
-                    </Text>
-                    <Text style={{ fontSize: 12, color: "#666" }}>
-                      You're Owed
-                    </Text>
-                  </View>
-                )}
-
-                {summaryStats.totalOwe > 0 && (
-                  <View
-                    style={{
-                      backgroundColor: "#fff",
-                      borderRadius: 12,
-                      padding: 12,
-                      minWidth: 100,
-                      alignItems: "center",
-                    }}
-                  >
-                    <Text
-                      style={{
-                        fontSize: 18,
-                        fontWeight: "bold",
-                        color: "#F44336",
-                      }}
-                    >
-                      ${summaryStats.totalOwe.toFixed(2)}
-                    </Text>
-                    <Text style={{ fontSize: 12, color: "#666" }}>You Owe</Text>
-                  </View>
+                    <View style={{ alignItems: "center" }}>
+                      {summaryStats.totalOwed > 0 && (
+                        <Text
+                          style={{
+                            fontSize: 16,
+                            fontWeight: "bold",
+                            color: "#4CAF50",
+                            marginBottom: 2,
+                          }}
+                        >
+                          +${summaryStats.totalOwed.toFixed(2)}
+                        </Text>
+                      )}
+                      {summaryStats.totalOwe > 0 && (
+                        <Text
+                          style={{
+                            fontSize: 16,
+                            fontWeight: "bold",
+                            color: "#F44336",
+                            marginBottom: 2,
+                          }}
+                        >
+                          -${summaryStats.totalOwe.toFixed(2)}
+                        </Text>
+                      )}
+                      <Text style={{ fontSize: 12, color: darkMode ? "#CBD5E0" : "#666" }}>
+                        Your Balance
+                      </Text>
+                    </View>
+                  </Pressable>
                 )}
               </View>
             </ScrollView>
@@ -786,39 +828,82 @@ const FriendsScreen = ({
                   showsHorizontalScrollIndicator={false}
                   style={{ marginBottom: 12 }}
                 >
-                  <View style={{ flexDirection: "row", gap: 8 }}>
-                    {["all", "settled", "owes"].map((filter) => (
-                      <Pressable
-                        key={filter}
-                        onPress={() => setFilterBy(filter)}
-                        style={({ pressed }) => ({
-                          backgroundColor:
-                            filterBy === filter
-                              ? "#1976d2"
-                              : pressed
-                              ? "#f0f0f0"
-                              : "#fff",
-                          borderRadius: 20,
-                          paddingHorizontal: 12,
-                          paddingVertical: 6,
-                          borderWidth: 1,
-                          borderColor: filterBy === filter ? "#1976d2" : "#ddd",
-                        })}
-                      >
-                        <Text
-                          style={{
-                            color: filterBy === filter ? "#fff" : "#666",
-                            fontSize: 12,
-                            fontWeight: "500",
-                            textTransform: "capitalize",
-                          }}
+                  <View style={{ flexDirection: "row", gap: 8, marginBottom: 8 }}>
+                    {["all", "settled", "owes", "recent", "highBalance"].map((filter) => {
+                      const getFilterLabel = (filter) => {
+                        switch(filter) {
+                          case "recent": return "Recent";
+                          case "highBalance": return "High Balance";
+                          default: return filter.charAt(0).toUpperCase() + filter.slice(1);
+                        }
+                      };
+                      
+                      return (
+                        <Pressable
+                          key={filter}
+                          onPress={() => setFilterBy(filter)}
+                          style={({ pressed }) => ({
+                            backgroundColor:
+                              filterBy === filter
+                                ? (darkMode ? "#D69E2E" : "#8B4513") // Gold in dark mode, brown in light mode
+                                : pressed
+                                ? (darkMode ? "#374151" : "#f0f0f0")
+                                : (darkMode ? "#2D3748" : "#fff"),
+                            borderRadius: 16, // Match History screen
+                            paddingHorizontal: 12,
+                            paddingVertical: 6,
+                            borderWidth: 1,
+                            borderColor: filterBy === filter 
+                              ? (darkMode ? "#D69E2E" : "#8B4513")
+                              : (darkMode ? "#4A5568" : "#ddd"),
+                          })}
                         >
-                          {filter}
-                        </Text>
-                      </Pressable>
-                    ))}
+                          <Text
+                            style={{
+                              color: filterBy === filter 
+                                ? "#fff" 
+                                : (darkMode ? "#E2E8F0" : "#666"),
+                              fontSize: 12,
+                              fontWeight: "500",
+                            }}
+                          >
+                            {getFilterLabel(filter)}
+                          </Text>
+                        </Pressable>
+                      );
+                    })}
                   </View>
                 </ScrollView>
+                
+                {/* Sort Button */}
+                <Pressable
+                  onPress={() => {
+                    const nextSort = sortBy === "name" ? "balance" : sortBy === "balance" ? "activity" : "name";
+                    setSortBy(nextSort);
+                  }}
+                  style={({ pressed }) => ({
+                    backgroundColor: pressed 
+                      ? (darkMode ? "#B7791F" : "#6B3409")
+                      : (darkMode ? "#D69E2E" : "#8B4513"),
+                    borderRadius: 16,
+                    paddingHorizontal: 12,
+                    paddingVertical: 6,
+                    borderWidth: 1,
+                    borderColor: darkMode ? "#D69E2E" : "#8B4513",
+                    alignSelf: "flex-start",
+                    marginBottom: 12,
+                  })}
+                >
+                  <Text
+                    style={{
+                      color: "#fff",
+                      fontSize: 12,
+                      fontWeight: "500",
+                    }}
+                  >
+                    Sort: {sortBy === "name" ? "Name" : sortBy === "balance" ? "Balance" : "Activity"}
+                  </Text>
+                </Pressable>
               </>
             )}
           </View>
@@ -837,7 +922,7 @@ const FriendsScreen = ({
                 <Text
                   style={{
                     textAlign: "center",
-                    color: "#666",
+                    color: darkMode ? "#CBD5E0" : "#666",
                     fontSize: 18,
                     fontWeight: "500",
                     marginBottom: 8,
@@ -848,7 +933,7 @@ const FriendsScreen = ({
                 <Text
                   style={{
                     textAlign: "center",
-                    color: "#999",
+                    color: darkMode ? "#A0AEC0" : "#999",
                     fontSize: 14,
                     marginBottom: 20,
                   }}
@@ -861,7 +946,9 @@ const FriendsScreen = ({
                   <Pressable
                     onPress={() => setShowAddModal(true)}
                     style={({ pressed }) => ({
-                      backgroundColor: pressed ? "#1565C0" : "#1976d2",
+                      backgroundColor: pressed 
+                        ? (darkMode ? "#B7791F" : "#6B3409")
+                        : (darkMode ? "#D69E2E" : "#8B4513"),
                       borderRadius: 12,
                       paddingHorizontal: 24,
                       paddingVertical: 12,
@@ -886,7 +973,7 @@ const FriendsScreen = ({
             presentationStyle="pageSheet"
             onRequestClose={cancelEdit}
           >
-            <SafeAreaView style={{ flex: 1, backgroundColor: "#EFE4D2" }}>
+            <SafeAreaView style={{ flex: 1, backgroundColor: darkMode ? "#1A1A1A" : "#EFE4D2" }}>
               <View style={{ flex: 1, padding: 20 }}>
                 <View
                   style={{
@@ -900,20 +987,20 @@ const FriendsScreen = ({
                     style={{
                       fontSize: 24,
                       fontWeight: "bold",
-                      color: "#2356A8",
+                      color: darkMode ? "#D69E2E" : "#8B4513",
                     }}
                   >
                     {isEditing ? "Edit Friend" : "Add New Friend"}
                   </Text>
                   <Pressable onPress={cancelEdit}>
-                    <Text style={{ fontSize: 16, color: "#666" }}>Cancel</Text>
+                    <Text style={{ fontSize: 16, color: darkMode ? "#CBD5E0" : "#666" }}>Cancel</Text>
                   </Pressable>
                 </View>
 
                 <ScrollView showsVerticalScrollIndicator={false}>
                   <View
                     style={{
-                      backgroundColor: "#fff",
+                      backgroundColor: darkMode ? "#2D3748" : "#fff",
                       borderRadius: 16,
                       padding: 20,
                     }}
@@ -924,14 +1011,16 @@ const FriendsScreen = ({
                       onChangeText={setFriend}
                       style={{
                         borderWidth: 1,
-                        borderColor: "#ddd",
+                        borderColor: darkMode ? "#4A5568" : "#ddd",
                         borderRadius: 12,
                         padding: 14,
-                        backgroundColor: "#f9f9f9",
+                        backgroundColor: darkMode ? "#1A202C" : "#f9f9f9",
                         fontSize: 16,
+                        color: darkMode ? "#FFFFFF" : "#374151",
                         marginBottom: 16,
                       }}
                       maxLength={50}
+                      placeholderTextColor={darkMode ? "#A0AEC0" : "#999"}
                     />
 
                     <TextInput
@@ -942,13 +1031,15 @@ const FriendsScreen = ({
                       autoCapitalize="none"
                       style={{
                         borderWidth: 1,
-                        borderColor: "#ddd",
+                        borderColor: darkMode ? "#4A5568" : "#ddd",
                         borderRadius: 12,
                         padding: 14,
-                        backgroundColor: "#f9f9f9",
+                        backgroundColor: darkMode ? "#1A202C" : "#f9f9f9",
                         fontSize: 16,
+                        color: darkMode ? "#FFFFFF" : "#374151",
                         marginBottom: 16,
                       }}
+                      placeholderTextColor={darkMode ? "#A0AEC0" : "#999"}
                     />
 
                     <TextInput
@@ -958,13 +1049,15 @@ const FriendsScreen = ({
                       keyboardType="phone-pad"
                       style={{
                         borderWidth: 1,
-                        borderColor: "#ddd",
+                        borderColor: darkMode ? "#4A5568" : "#ddd",
                         borderRadius: 12,
                         padding: 14,
-                        backgroundColor: "#f9f9f9",
+                        backgroundColor: darkMode ? "#1A202C" : "#f9f9f9",
                         fontSize: 16,
+                        color: darkMode ? "#FFFFFF" : "#374151",
                         marginBottom: 16,
                       }}
+                      placeholderTextColor={darkMode ? "#A0AEC0" : "#999"}
                     />
 
                     <TextInput
@@ -979,8 +1072,10 @@ const FriendsScreen = ({
                         backgroundColor: "#f9f9f9",
                         fontSize: 16,
                         marginBottom: 24,
+                        color: darkMode ? "#FFFFFF" : "#333",
                       }}
                       maxLength={2}
+                      placeholderTextColor="#999"
                     />
 
                     <Pressable
@@ -988,10 +1083,10 @@ const FriendsScreen = ({
                       disabled={isSubmitting}
                       style={({ pressed }) => ({
                         backgroundColor: isSubmitting
-                          ? "#ccc"
+                          ? (darkMode ? "#4A5568" : "#ccc")
                           : pressed
-                          ? "#1565C0"
-                          : "#1976d2",
+                          ? (darkMode ? "#B7791F" : "#6B3409")
+                          : (darkMode ? "#D69E2E" : "#8B4513"),
                         paddingVertical: 16,
                         borderRadius: 12,
                         alignItems: "center",
@@ -1016,7 +1111,7 @@ const FriendsScreen = ({
                       <Text
                         style={{
                           textAlign: "center",
-                          color: "#666",
+                          color: darkMode ? "#A0AEC0" : "#666",
                           fontSize: 12,
                           marginTop: 12,
                           fontStyle: "italic",

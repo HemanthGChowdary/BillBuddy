@@ -1,5 +1,14 @@
 import React, { useState, useEffect, useMemo } from "react";
-import { View, Text, SafeAreaView, Pressable, StyleSheet } from "react-native";
+import { 
+  View, 
+  Text, 
+  SafeAreaView, 
+  Pressable, 
+  StyleSheet, 
+  ScrollView,
+  TouchableOpacity 
+} from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 import { getCurrencySymbol } from "../utils/helpers";
 
 export default function FriendDetailScreen({
@@ -7,6 +16,7 @@ export default function FriendDetailScreen({
   bills,
   profileName,
   friends,
+  darkMode = false, // Add darkMode prop
 }) {
   const { friendName } = route.params;
 
@@ -113,105 +123,365 @@ export default function FriendDetailScreen({
 
   const currencySymbol = useMemo(() => getCurrencySymbol(currency), [currency]);
 
+  // Get friend emoji
+  const friendData = friends.find(f => f.name === friendName);
+  const friendEmoji = friendData?.emoji || "👤";
+
+  const netBalance = friendOwesYou - youOweFriend;
+
   return (
-    <SafeAreaView style={styles.container}>
-      <Text style={styles.header}>{friendName}'s Summary</Text>
-      <View style={styles.summaryCard}>
-        <Text style={styles.summaryText}>
-          You owe {friendName}:{" "}
-          <Text style={styles.owedAmount}>
-            {currencySymbol}
-            {youOweFriend.toFixed(2)}
-          </Text>
-        </Text>
-        <Text style={styles.summaryText}>
-          {friendName} owes you:{" "}
-          <Text style={styles.owedAmount}>
-            {currencySymbol}
-            {friendOwesYou.toFixed(2)}
-          </Text>
-        </Text>
-        {/* NEW LINES ADDED HERE */}
-        <Text style={styles.summaryText}>
-          {friendName} owes others:{" "}
-          <Text style={styles.owedAmount}>
-            {currencySymbol}
-            {friendOwesOthers.toFixed(2)}
-          </Text>
-        </Text>
-        <Text style={styles.summaryText}>
-          Others owe {friendName}:{" "}
-          <Text style={styles.owedAmount}>
-            {currencySymbol}
-            {othersOweFriend.toFixed(2)}
-          </Text>
-        </Text>
+    <SafeAreaView style={[styles.container, darkMode && styles.darkContainer]}>
+      {/* Header */}
+      <View style={[styles.header, darkMode && styles.darkHeader]}>
+        <View style={styles.headerContent}>
+          <View style={[styles.friendAvatar, darkMode && styles.darkFriendAvatar]}>
+            <Text style={styles.friendEmoji}>{friendEmoji}</Text>
+          </View>
+          <View style={styles.headerTextContainer}>
+            <Text style={[styles.friendName, darkMode && styles.darkFriendName]}>
+              {friendName}
+            </Text>
+            <Text style={[styles.balanceStatus, { 
+              color: netBalance > 0 ? "#4CAF50" : netBalance < 0 ? "#F44336" : (darkMode ? "#CBD5E0" : "#666")
+            }]}>
+              {netBalance > 0 
+                ? `Owes you ${currencySymbol}${netBalance.toFixed(2)}`
+                : netBalance < 0 
+                ? `You owe ${currencySymbol}${Math.abs(netBalance).toFixed(2)}`
+                : "Settled up"
+              }
+            </Text>
+          </View>
+        </View>
       </View>
 
-      <Pressable
-        style={({ pressed }) => [
-          styles.settleButton,
-          pressed && styles.settleButtonPressed,
-        ]}
+      <ScrollView 
+        style={styles.scrollContainer}
+        contentContainerStyle={{ paddingBottom: 20 }}
+        showsVerticalScrollIndicator={false}
       >
-        <Text style={styles.settleButtonText}>Settle Up</Text>
-      </Pressable>
+        {/* Balance Overview */}
+        <View style={styles.section}>
+          <Text style={[styles.sectionTitle, darkMode && styles.darkSectionTitle]}>
+            Balance Overview
+          </Text>
+          
+          <View style={[styles.balanceCard, darkMode && styles.darkBalanceCard]}>
+            <View style={styles.balanceRow}>
+              <View style={styles.balanceItem}>
+                <Text style={[styles.balanceLabel, darkMode && styles.darkBalanceLabel]}>
+                  You owe {friendName}
+                </Text>
+                <Text style={[styles.balanceAmount, { color: "#F44336" }]}>
+                  {currencySymbol}{youOweFriend.toFixed(2)}
+                </Text>
+              </View>
+              
+              <View style={styles.balanceItem}>
+                <Text style={[styles.balanceLabel, darkMode && styles.darkBalanceLabel]}>
+                  {friendName} owes you
+                </Text>
+                <Text style={[styles.balanceAmount, { color: "#4CAF50" }]}>
+                  {currencySymbol}{friendOwesYou.toFixed(2)}
+                </Text>
+              </View>
+            </View>
+            
+            <View style={[styles.divider, darkMode && styles.darkDivider]} />
+            
+            <View style={styles.netBalanceRow}>
+              <Text style={[styles.netBalanceLabel, darkMode && styles.darkNetBalanceLabel]}>
+                Net Balance
+              </Text>
+              <Text style={[styles.netBalanceAmount, { 
+                color: netBalance > 0 ? "#4CAF50" : netBalance < 0 ? "#F44336" : (darkMode ? "#CBD5E0" : "#666")
+              }]}>
+                {netBalance > 0 ? "+" : ""}{currencySymbol}{netBalance.toFixed(2)}
+              </Text>
+            </View>
+          </View>
+        </View>
+
+        {/* Other Relationships */}
+        {(friendOwesOthers > 0 || othersOweFriend > 0) && (
+          <View style={styles.section}>
+            <Text style={[styles.sectionTitle, darkMode && styles.darkSectionTitle]}>
+              {friendName}'s Other Balances
+            </Text>
+            
+            <View style={[styles.otherBalancesCard, darkMode && styles.darkOtherBalancesCard]}>
+              {friendOwesOthers > 0 && (
+                <View style={styles.otherBalanceRow}>
+                  <View style={styles.otherBalanceIcon}>
+                    <Ionicons name="arrow-up" size={16} color="#F44336" />
+                  </View>
+                  <View style={styles.otherBalanceContent}>
+                    <Text style={[styles.otherBalanceLabel, darkMode && styles.darkOtherBalanceLabel]}>
+                      {friendName} owes others
+                    </Text>
+                    <Text style={[styles.otherBalanceAmount, { color: "#F44336" }]}>
+                      {currencySymbol}{friendOwesOthers.toFixed(2)}
+                    </Text>
+                  </View>
+                </View>
+              )}
+              
+              {othersOweFriend > 0 && (
+                <View style={styles.otherBalanceRow}>
+                  <View style={styles.otherBalanceIcon}>
+                    <Ionicons name="arrow-down" size={16} color="#4CAF50" />
+                  </View>
+                  <View style={styles.otherBalanceContent}>
+                    <Text style={[styles.otherBalanceLabel, darkMode && styles.darkOtherBalanceLabel]}>
+                      Others owe {friendName}
+                    </Text>
+                    <Text style={[styles.otherBalanceAmount, { color: "#4CAF50" }]}>
+                      {currencySymbol}{othersOweFriend.toFixed(2)}
+                    </Text>
+                  </View>
+                </View>
+              )}
+            </View>
+          </View>
+        )}
+      </ScrollView>
+
+      {/* Action Buttons */}
+      {netBalance !== 0 && (
+        <View style={[styles.actionContainer, darkMode && styles.darkActionContainer]}>
+          <TouchableOpacity
+            style={[styles.settleButton, darkMode && styles.darkSettleButton]}
+            onPress={() => {
+              // TODO: Implement settle up functionality
+              console.log("Settle up with", friendName);
+            }}
+          >
+            <Ionicons name="checkmark-circle" size={20} color="#fff" style={{ marginRight: 8 }} />
+            <Text style={styles.settleButtonText}>Settle Up</Text>
+          </TouchableOpacity>
+        </View>
+      )}
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
+  // Container
   container: {
     flex: 1,
     backgroundColor: "#EFE4D2",
-    padding: 20,
   },
+  darkContainer: {
+    backgroundColor: "#1A1A1A",
+  },
+  
+  // Header
   header: {
-    fontSize: 28,
-    fontWeight: "bold",
-    color: "#2356A8",
-    alignSelf: "center",
-    marginBottom: 30,
-  },
-  summaryCard: {
     backgroundColor: "#fff",
-    width: 350,
-    height: 150,
-    left: 20,
-    borderRadius: 10,
+    paddingHorizontal: 20,
+    paddingVertical: 24,
+    borderBottomWidth: 1,
+    borderBottomColor: "#E5E7EB",
+  },
+  darkHeader: {
+    backgroundColor: "#2D3748",
+    borderBottomColor: "#4A5568",
+  },
+  headerContent: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  friendAvatar: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: "#EFE4D2",
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: 16,
+    borderWidth: 2,
+    borderColor: "#D69E2E",
+  },
+  darkFriendAvatar: {
+    backgroundColor: "#4A5568",
+    borderColor: "#D69E2E",
+  },
+  friendEmoji: {
+    fontSize: 32,
+  },
+  headerTextContainer: {
+    flex: 1,
+  },
+  friendName: {
+    fontSize: 24,
+    fontWeight: "700",
+    color: "#8B4513", // Brown theme
+    marginBottom: 4,
+  },
+  darkFriendName: {
+    color: "#D69E2E", // Gold in dark mode
+  },
+  balanceStatus: {
+    fontSize: 16,
+    fontWeight: "500",
+  },
+  
+  // Scroll Container
+  scrollContainer: {
+    flex: 1,
     padding: 20,
-    marginBottom: 20,
+  },
+  
+  // Sections
+  section: {
+    marginBottom: 24,
+  },
+  sectionTitle: {
+    fontSize: 20,
+    fontWeight: "600",
+    color: "#374151",
+    marginBottom: 16,
+  },
+  darkSectionTitle: {
+    color: "#FFFFFF",
+  },
+  
+  // Balance Card
+  balanceCard: {
+    backgroundColor: "#fff",
+    borderRadius: 16,
+    padding: 20,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  darkBalanceCard: {
+    backgroundColor: "#2D3748",
+  },
+  balanceRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginBottom: 16,
+  },
+  balanceItem: {
+    flex: 1,
+    alignItems: "center",
+  },
+  balanceLabel: {
+    fontSize: 14,
+    color: "#6B7280",
+    marginBottom: 8,
+    textAlign: "center",
+  },
+  darkBalanceLabel: {
+    color: "#CBD5E0",
+  },
+  balanceAmount: {
+    fontSize: 20,
+    fontWeight: "700",
+  },
+  divider: {
+    height: 1,
+    backgroundColor: "#E5E7EB",
+    marginBottom: 16,
+  },
+  darkDivider: {
+    backgroundColor: "#4A5568",
+  },
+  netBalanceRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  netBalanceLabel: {
+    fontSize: 18,
+    fontWeight: "600",
+    color: "#374151",
+  },
+  darkNetBalanceLabel: {
+    color: "#FFFFFF",
+  },
+  netBalanceAmount: {
+    fontSize: 24,
+    fontWeight: "800",
+  },
+  
+  // Other Balances Card
+  otherBalancesCard: {
+    backgroundColor: "#F8FAFC",
+    borderRadius: 12,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+  },
+  darkOtherBalancesCard: {
+    backgroundColor: "#1A202C",
+    borderColor: "#4A5568",
+  },
+  otherBalanceRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 12,
+  },
+  otherBalanceIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: "#F3F4F6",
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: 12,
+  },
+  otherBalanceContent: {
+    flex: 1,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  otherBalanceLabel: {
+    fontSize: 16,
+    color: "#374151",
+  },
+  darkOtherBalanceLabel: {
+    color: "#FFFFFF",
+  },
+  otherBalanceAmount: {
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  
+  // Action Container
+  actionContainer: {
+    padding: 20,
+    borderTopWidth: 1,
+    borderTopColor: "#E5E7EB",
+    backgroundColor: "#fff",
+  },
+  darkActionContainer: {
+    backgroundColor: "#2D3748",
+    borderTopColor: "#4A5568",
+  },
+  settleButton: {
+    backgroundColor: "#8B4513", // Brown theme
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    paddingVertical: 16,
+    borderRadius: 12,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
-    elevation: 3,
+    elevation: 2,
   },
-  summaryText: {
-    fontSize: 18,
-    marginBottom: 10,
-    color: "#333",
-  },
-  owedAmount: {
-    fontWeight: "bold",
-    color: "#D32F2F", // Red for amounts you owe
-  },
-  settleButton: {
-    backgroundColor: "#2356A8",
-    padding: 14,
-    width: 350,
-    borderRadius: 10,
-    marginTop: 20,
-    left: 20,
-    alignItems: "center",
-  },
-  settleButtonPressed: {
-    backgroundColor: "#1C4A8D",
-    transform: [{ scale: 0.98 }],
+  darkSettleButton: {
+    backgroundColor: "#D69E2E", // Gold in dark mode
   },
   settleButtonText: {
     color: "#fff",
-    fontWeight: "bold",
+    fontWeight: "600",
     fontSize: 16,
   },
 });

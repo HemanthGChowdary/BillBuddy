@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { NavigationContainer } from "@react-navigation/native";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -24,34 +24,36 @@ export default function App() {
   const [bills, setBills] = useState([]);
   const [profileName, setProfileName] = useState("");
   const [profileEmail, setProfileEmail] = useState("");
+  const [darkMode, setDarkMode] = useState(false);
 
-  const professionalColors = [
-    "#2C3E50",
-    "#3498DB",
-    "#1ABC9C",
-    "#F39C12",
-    "#E74C3C",
-    "#8E44AD",
-    "#27AE60",
-    "#34495E",
-    "#16A085",
-    "#2980B9",
-    "#95A5A6",
-    "#D35400",
-    "#7F8C8D",
-    "#BDC3C7",
-    "#2ECC71",
-    "#F1C40F",
-    "#5D6D7E",
-    "#273746",
-    "#566573",
-    "#AAB7B8",
-    "#C0392B",
-    "#7D3C98",
-    "#45B39D",
-    "#117A65",
-    "#F5B041",
-  ];
+  // Navigation refs for double-tap functionality
+  const navigationRef = useRef();
+  const lastTapRef = useRef({});
+  const screenResetHandlers = useRef({});
+
+  const handleTabPress = (routeName) => {
+    const now = Date.now();
+    const lastTap = lastTapRef.current[routeName] || 0;
+
+    if (now - lastTap < 300) {
+      // Double tap within 300ms
+      // Reset to main screen of the tab
+      if (navigationRef.current) {
+        navigationRef.current.navigate(routeName);
+        // Call screen-specific reset handler if available
+        const resetHandler = screenResetHandlers.current[routeName];
+        if (resetHandler) {
+          resetHandler();
+        }
+      }
+    }
+
+    lastTapRef.current[routeName] = now;
+  };
+
+  const registerScreenResetHandler = (routeName, handler) => {
+    screenResetHandlers.current[routeName] = handler;
+  };
 
   useEffect(() => {
     const loadBills = async () => {
@@ -64,16 +66,18 @@ export default function App() {
   useEffect(() => {
     const loadData = async () => {
       const savedFriends = await AsyncStorage.getItem("friends");
+      const savedDarkMode = await AsyncStorage.getItem("darkMode");
 
       if (savedFriends) setFriends(JSON.parse(savedFriends));
+      if (savedDarkMode !== null) setDarkMode(JSON.parse(savedDarkMode));
     };
     loadData();
   }, []);
 
-  function getRandomColor() {
-    const index = Math.floor(Math.random() * professionalColors.length);
-    return professionalColors[index];
-  }
+  // Save dark mode preference
+  useEffect(() => {
+    AsyncStorage.setItem("darkMode", JSON.stringify(darkMode));
+  }, [darkMode]);
 
   useEffect(() => {
     AsyncStorage.setItem("bills", JSON.stringify(bills));
@@ -88,16 +92,40 @@ export default function App() {
     );
 
   return (
-    <NavigationContainer>
-      <Tab.Navigator screenOptions={{ headerShown: false }}>
+    <NavigationContainer ref={navigationRef}>
+      <Tab.Navigator
+        screenOptions={({ route }) => ({
+          headerShown: false,
+          tabBarStyle: {
+            backgroundColor: darkMode ? "#2D3748" : "#FFFFFF",
+            borderTopColor: darkMode ? "#4A5568" : "#E5E7EB",
+            paddingBottom: 4,
+            paddingTop: 4,
+            height: 80,
+          },
+          tabBarLabelStyle: {
+            fontSize: 12,
+            fontWeight: "600",
+            marginTop: 4,
+          },
+          tabBarActiveTintColor: darkMode ? "#D69E2E" : "#8B4513", // Gold in dark mode, brown in light mode
+          tabBarInactiveTintColor: darkMode ? "#A0AEC0" : "#6B7280",
+        })}
+        screenListeners={({ route }) => ({
+          tabPress: (e) => {
+            handleTabPress(route.name);
+          },
+        })}
+      >
         <Tab.Screen
           name="Bills"
           options={{
-            tabBarIcon: ({ color }) => (
+            tabBarLabel: "Bills",
+            tabBarIcon: ({ color, focused }) => (
               <Ionicons
-                name="cash-outline"
+                name={focused ? "cash" : "cash-outline"}
                 size={24}
-                color={getRandomColor()}
+                color={color}
               />
             ),
           }}
@@ -113,12 +141,9 @@ export default function App() {
         <Tab.Screen
           name="Friends"
           options={{
-            tabBarIcon: ({ color }) => (
-              <FontAwesome5
-                name="user-friends"
-                size={24}
-                color={getRandomColor()}
-              />
+            tabBarLabel: "Friends",
+            tabBarIcon: ({ color, focused }) => (
+              <FontAwesome5 name="user-friends" size={24} color={color} />
             ),
           }}
         >
@@ -128,14 +153,20 @@ export default function App() {
               setFriends={setFriends}
               bills={bills}
               profileName={profileName}
+              darkMode={darkMode}
             />
           )}
         </Tab.Screen>
         <Tab.Screen
           name="Groups"
           options={{
-            tabBarIcon: ({ color }) => (
-              <FontAwesome name="group" size={24} color={getRandomColor()} />
+            tabBarLabel: "Groups",
+            tabBarIcon: ({ color, focused }) => (
+              <FontAwesome
+                name={focused ? "users" : "group"}
+                size={24}
+                color={color}
+              />
             ),
           }}
         >
@@ -145,14 +176,16 @@ export default function App() {
               bills={bills}
               addBill={addBill}
               profileName={profileName}
+              darkMode={darkMode}
             />
           )}
         </Tab.Screen>
         <Tab.Screen
           name="History"
           options={{
-            tabBarIcon: ({ color }) => (
-              <Octicons name="history" size={24} color={getRandomColor()} />
+            tabBarLabel: "History",
+            tabBarIcon: ({ color, focused }) => (
+              <Octicons name="history" size={24} color={color} />
             ),
           }}
         >
@@ -161,16 +194,23 @@ export default function App() {
               bills={bills}
               deleteBill={deleteBill}
               editBill={editBill}
+              addBill={addBill}
               friends={friends}
               profileName={profileName}
+              darkMode={darkMode}
             />
           )}
         </Tab.Screen>
         <Tab.Screen
           name="Profile"
           options={{
-            tabBarIcon: ({ color }) => (
-              <AntDesign name="profile" size={24} color={getRandomColor()} />
+            tabBarLabel: "Profile",
+            tabBarIcon: ({ color, focused }) => (
+              <AntDesign
+                name={focused ? "user" : "profile"}
+                size={24}
+                color={color}
+              />
             ),
           }}
         >
@@ -180,6 +220,11 @@ export default function App() {
               setProfileName={setProfileName}
               profileEmail={profileEmail}
               setProfileEmail={setProfileEmail}
+              darkMode={darkMode}
+              setDarkMode={setDarkMode}
+              onTabPress={(resetHandler) =>
+                registerScreenResetHandler("Profile", resetHandler)
+              }
             />
           )}
         </Tab.Screen>
