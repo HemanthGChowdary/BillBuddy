@@ -235,7 +235,11 @@ const BillItem = React.memo(
             )}
             {!item.photoUri && (
               <TouchableOpacity
-                style={[styles.photoIndicator, styles.noPhotoIndicator]}
+                style={[
+                  styles.photoIndicator,
+                  styles.noPhotoIndicator,
+                  darkMode && styles.darkNoPhotoIndicator,
+                ]}
                 onPress={() => onImagePress(item)}
                 activeOpacity={0.7}
               >
@@ -424,9 +428,9 @@ const EditBillModal = ({
   };
 
   const handleDateChange = (event, selectedDate) => {
-    setShowDatePicker(false); // ✅ Always hide picker regardless of platform
+    setShowDatePicker(false);
 
-    if (event.type === "dismissed") return; // if user canceled
+    if (event.type === "dismissed") return;
 
     if (selectedDate) {
       setExpenseDate(selectedDate);
@@ -451,7 +455,9 @@ const EditBillModal = ({
           <View
             style={[styles.modalHeader, darkMode && styles.darkModalContent]}
           >
-            <Text style={[styles.modalTitle, darkMode && { color: "#FFFFFF" }]}>
+            <Text
+              style={[styles.modalTitle, darkMode && styles.darkModalTitle]}
+            >
               Edit Expense
             </Text>
             <TouchableOpacity onPress={onCancel}>
@@ -464,14 +470,19 @@ const EditBillModal = ({
           </View>
 
           <ScrollView
-            style={styles.modalScrollContainer}
+            style={[
+              styles.modalScrollContainer,
+              darkMode && styles.darkModalContent,
+            ]}
             contentContainerStyle={{ padding: 6, paddingBottom: 36 }}
             keyboardShouldPersistTaps="handled"
             nestedScrollEnabled
           >
             {/* Expense Name */}
             <View style={styles.inputGroup}>
-              <Text style={[styles.inputLabel, darkMode && styles.darkInputLabel]}>
+              <Text
+                style={[styles.inputLabel, darkMode && styles.darkInputLabel]}
+              >
                 Expense Name *
               </Text>
               <TextInput
@@ -496,14 +507,16 @@ const EditBillModal = ({
 
             {/* Amount */}
             <View style={styles.inputGroup}>
-              <Text style={[styles.inputLabel, darkMode && styles.darkInputLabel]}>
+              <Text
+                style={[styles.inputLabel, darkMode && styles.darkInputLabel]}
+              >
                 Amount *
               </Text>
               <View style={styles.amountContainer}>
                 <Text
                   style={[
                     styles.currencySymbol,
-                    darkMode && { color: "#D69E2E" },
+                    darkMode && styles.darkCurrencySymbol,
                   ]}
                 >
                   {getCurrencySymbol(currency)}
@@ -533,16 +546,21 @@ const EditBillModal = ({
 
             {/* Date Picker */}
             <View style={styles.inputGroup}>
-              <Text style={[styles.inputLabel, darkMode && styles.darkInputLabel]}>
+              <Text
+                style={[styles.inputLabel, darkMode && styles.darkInputLabel]}
+              >
                 Date
               </Text>
               <TouchableOpacity
                 onPress={() => setShowDatePicker(true)}
-                style={[styles.dateButton, darkMode && styles.darkTextInput]}
+                style={[styles.dateButton, darkMode && styles.darkDateButton]}
               >
                 <Text style={styles.dateButtonIcon}>📅</Text>
                 <Text
-                  style={[styles.dateButtonText, darkMode && styles.darkText]}
+                  style={[
+                    styles.dateButtonText,
+                    darkMode && styles.darkDateButtonText,
+                  ]}
                 >
                   {expenseDate.toLocaleDateString()}
                 </Text>
@@ -561,7 +579,9 @@ const EditBillModal = ({
 
             {/* Currency */}
             <View style={[styles.inputGroup]}>
-              <Text style={[styles.inputLabel, darkMode && styles.darkInputLabel]}>
+              <Text
+                style={[styles.inputLabel, darkMode && styles.darkInputLabel]}
+              >
                 Currency
               </Text>
               <DropDownPicker
@@ -581,10 +601,13 @@ const EditBillModal = ({
                   styles.dropdownContainer,
                   darkMode && styles.darkDropdownContainer,
                 ]}
-                textStyle={[styles.dropdownText, darkMode && styles.darkText]}
+                textStyle={[
+                  styles.dropdownText,
+                  darkMode && styles.darkDropdownText,
+                ]}
                 placeholderStyle={[
                   styles.dropdownPlaceholder,
-                  darkMode && styles.darkSubtext,
+                  darkMode && styles.darkDropdownPlaceholder,
                 ]}
                 listMode="SCROLLVIEW"
                 scrollViewProps={{ keyboardShouldPersistTaps: "handled" }}
@@ -593,7 +616,9 @@ const EditBillModal = ({
 
             {/* Who Paid */}
             <View style={[styles.inputGroup]}>
-              <Text style={[styles.inputLabel, darkMode && styles.darkInputLabel]}>
+              <Text
+                style={[styles.inputLabel, darkMode && styles.darkInputLabel]}
+              >
                 Who paid? *
               </Text>
               <DropDownPicker
@@ -616,13 +641,20 @@ const EditBillModal = ({
                   styles.dropdownContainer,
                   darkMode && styles.darkDropdownContainer,
                 ]}
-                textStyle={[styles.dropdownText, darkMode && styles.darkText]}
+                textStyle={[
+                  styles.dropdownText,
+                  darkMode && styles.darkDropdownText,
+                ]}
                 placeholderStyle={[
                   styles.dropdownPlaceholder,
-                  darkMode && styles.darkSubtext,
+                  darkMode && styles.darkDropdownPlaceholder,
                 ]}
                 searchable
                 searchPlaceholder="Search..."
+                searchTextInputStyle={[
+                  styles.searchTextInput,
+                  darkMode && styles.darkSearchTextInput,
+                ]}
                 listMode="SCROLLVIEW"
                 scrollViewProps={{ keyboardShouldPersistTaps: "handled" }}
                 zIndex={2000}
@@ -633,8 +665,10 @@ const EditBillModal = ({
             </View>
 
             {/* Split With */}
-            <View style={[styles.inputGroup, { marginBottom: 32 }]}>
-              <Text style={[styles.inputLabel, darkMode && styles.darkInputLabel]}>
+            <View style={[styles.inputGroup]}>
+              <Text
+                style={[styles.inputLabel, darkMode && styles.darkInputLabel]}
+              >
                 Split with who? *
               </Text>
               <DropDownPicker
@@ -659,14 +693,21 @@ const EditBillModal = ({
                   styles.dropdownContainer,
                   darkMode && styles.darkDropdownContainer,
                 ]}
-                textStyle={[styles.dropdownText, darkMode && styles.darkText]}
+                textStyle={[
+                  styles.dropdownText,
+                  darkMode && styles.darkDropdownText,
+                ]}
                 placeholderStyle={[
                   styles.dropdownPlaceholder,
-                  darkMode && styles.darkSubtext,
+                  darkMode && styles.darkDropdownPlaceholder,
                 ]}
                 mode="BADGE"
                 searchable
                 searchPlaceholder="Search..."
+                searchTextInputStyle={[
+                  styles.searchTextInput,
+                  darkMode && styles.darkSearchTextInput,
+                ]}
                 listMode="SCROLLVIEW"
                 scrollViewProps={{ keyboardShouldPersistTaps: "handled" }}
                 zIndex={1000}
@@ -684,7 +725,10 @@ const EditBillModal = ({
                   "#E9C46A",
                   "#A857D4",
                 ]}
-                badgeTextStyle={{ color: darkMode ? "#FFFFFF" : "black" }}
+                badgeTextStyle={[
+                  styles.badgeTextStyle,
+                  darkMode && styles.darkBadgeTextStyle,
+                ]}
               />
               {errors.splitWith && (
                 <Text style={styles.errorText}>{errors.splitWith}</Text>
@@ -693,7 +737,9 @@ const EditBillModal = ({
 
             {/* Note */}
             <View style={styles.inputGroup}>
-              <Text style={[styles.inputLabel, darkMode && styles.darkInputLabel]}>
+              <Text
+                style={[styles.inputLabel, darkMode && styles.darkInputLabel]}
+              >
                 Note (optional)
               </Text>
               <TextInput
@@ -715,25 +761,22 @@ const EditBillModal = ({
 
           {/* Actions */}
           <View
-            style={[
-              styles.modalActions,
-              darkMode && { borderTopColor: "#4A5568" },
-            ]}
+            style={[styles.modalActions, darkMode && styles.darkModalActions]}
           >
             <TouchableOpacity
               onPress={onCancel}
               style={[
                 styles.modalButton,
                 styles.cancelButton,
-                darkMode && {
-                  backgroundColor: "#4A5568",
-                  borderColor: "#718096",
-                },
+                darkMode && styles.darkCancelButton,
               ]}
               disabled={isLoading}
             >
               <Text
-                style={[styles.cancelButtonText, darkMode && styles.darkText]}
+                style={[
+                  styles.cancelButtonText,
+                  darkMode && styles.darkCancelButtonText,
+                ]}
               >
                 Cancel
               </Text>
@@ -1316,7 +1359,7 @@ export default function HistoryScreen({
             placeholderTextColor={darkMode ? "#A0AEC0" : "#9CA3AF"}
             value={searchQuery}
             onChangeText={setSearchQuery}
-            style={[styles.searchInput, darkMode && styles.darkText]}
+            style={[styles.searchInput, darkMode && styles.darkSearchInput]}
           />
           {searchQuery.length > 0 && (
             <TouchableOpacity
@@ -1386,7 +1429,7 @@ export default function HistoryScreen({
             <Ionicons
               name="swap-vertical"
               size={16}
-              color={darkMode ? "#fff" : "#374151"}
+              color="#fff" // Always white to match the brown/gold button background
             />
             <Text
               style={[
@@ -1447,7 +1490,9 @@ export default function HistoryScreen({
             <View
               style={[styles.modalHeader, darkMode && styles.darkModalContent]}
             >
-              <Text style={[styles.modalTitle, darkMode && { color: "#FFFFFF" }]}>
+              <Text
+                style={[styles.modalTitle, darkMode && styles.darkModalTitle]}
+              >
                 Expense Details
               </Text>
               <TouchableOpacity onPress={closeBillDetails}>
@@ -1460,7 +1505,10 @@ export default function HistoryScreen({
             </View>
 
             <ScrollView
-              style={styles.modalScrollContainer}
+              style={[
+                styles.modalScrollContainer,
+                darkMode && styles.darkModalContent,
+              ]}
               contentContainerStyle={{ paddingBottom: 20 }}
               keyboardShouldPersistTaps="handled"
             >
@@ -1477,7 +1525,7 @@ export default function HistoryScreen({
                       <Text
                         style={[
                           styles.billDetailsName,
-                          darkMode && { color: "#FFFFFF" },
+                          darkMode && styles.darkBillDetailsName,
                         ]}
                       >
                         {selectedBillDetails.name}
@@ -1485,7 +1533,7 @@ export default function HistoryScreen({
                       <Text
                         style={[
                           styles.billDetailsAmount,
-                          darkMode && { color: "#D69E2E" },
+                          darkMode && styles.darkBillDetailsAmount,
                         ]}
                       >
                         {getCurrencySymbol(
@@ -1544,14 +1592,17 @@ export default function HistoryScreen({
                         <Text
                           style={[
                             styles.payerLabel,
-                            darkMode && { color: "#FFFFFF" },
+                            darkMode && styles.darkPayerLabel,
                           ]}
                         >
                           Paid by
                         </Text>
                       </View>
                       <Text
-                        style={[styles.payerName, darkMode && { color: "#FFFFFF" }]}
+                        style={[
+                          styles.payerName,
+                          darkMode && styles.darkPayerName,
+                        ]}
                       >
                         {selectedBillDetails.payer === you
                           ? `${selectedBillDetails.payer} (You)`
@@ -1560,7 +1611,7 @@ export default function HistoryScreen({
                       <Text
                         style={[
                           styles.payerAmount,
-                          darkMode && { color: "#D69E2E" },
+                          darkMode && styles.darkPayerAmount,
                         ]}
                       >
                         {getCurrencySymbol(
@@ -1590,6 +1641,9 @@ export default function HistoryScreen({
                               styles.splitMemberCard,
                               darkMode && styles.darkSplitMemberCard,
                               split.isPayer && styles.payerHighlight,
+                              split.isPayer &&
+                                darkMode &&
+                                styles.darkPayerHighlight,
                             ]}
                           >
                             <View style={styles.splitMemberInfo}>
@@ -1597,7 +1651,7 @@ export default function HistoryScreen({
                                 <Text
                                   style={[
                                     styles.splitMemberName,
-                                    darkMode && { color: "#FFFFFF" },
+                                    darkMode && styles.darkSplitMemberName,
                                   ]}
                                 >
                                   {split.person === you
@@ -1617,7 +1671,7 @@ export default function HistoryScreen({
                                 <Text
                                   style={[
                                     styles.splitAmount,
-                                    darkMode && { color: "#D69E2E" },
+                                    darkMode && styles.darkSplitAmount,
                                   ]}
                                 >
                                   {getCurrencySymbol(
@@ -1643,7 +1697,7 @@ export default function HistoryScreen({
                                 <Text
                                   style={[
                                     styles.owesText,
-                                    darkMode && styles.darkSubtext,
+                                    darkMode && styles.darkOwesText,
                                   ]}
                                 >
                                   Owes{" "}
@@ -1683,7 +1737,7 @@ export default function HistoryScreen({
                       <Text
                         style={[
                           styles.splitTypeText,
-                          darkMode && { color: "#D69E2E" },
+                          darkMode && styles.darkSplitTypeText,
                         ]}
                       >
                         {selectedBillDetails.splitType === "exact"
@@ -1796,6 +1850,9 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: "#374151",
   },
+  darkSearchInput: {
+    color: "#FFFFFF",
+  },
   clearSearchButton: {
     padding: 4,
   },
@@ -1850,25 +1907,25 @@ const styles = StyleSheet.create({
   sortButton: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#fff",
+    backgroundColor: "#8B4513", // Brown theme to match active filters
     paddingHorizontal: 12,
-    paddingVertical: 5,
-    borderRadius: 120,
+    paddingVertical: 6, // Match filter button padding
+    borderRadius: 16, // Match filter button border radius
     borderWidth: 1,
-    borderColor: "#E5E7EB",
+    borderColor: "#8B4513",
     gap: 4,
   },
   darkSortButton: {
-    backgroundColor: "#D69E2E", // Same as active filter buttons in dark mode
+    backgroundColor: "#D69E2E", // Gold for dark mode
     borderColor: "#D69E2E",
   },
   sortButtonText: {
-    fontSize: 12,
+    fontSize: 12, // Match filter button font size
     fontWeight: "500",
-    color: "#374151",
+    color: "#fff", // White text for brown background
   },
   darkSortButtonText: {
-    color: "#fff", // White text like active filter buttons
+    color: "#fff", // White text for gold background
   },
 
   // List
@@ -1946,6 +2003,10 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#FED7D7",
     borderStyle: "dashed",
+  },
+  darkNoPhotoIndicator: {
+    backgroundColor: "#2D3748",
+    borderColor: "#4A5568",
   },
   photoPreview: {
     marginTop: 8,
@@ -2235,6 +2296,9 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: "#2356A8",
   },
+  darkModalTitle: {
+    color: "#D69E2E",
+  },
   closeButton: {
     padding: 4,
   },
@@ -2252,10 +2316,13 @@ const styles = StyleSheet.create({
     position: "absolute",
     left: 16,
     top: 16,
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: "600",
     color: "#2356A8",
     zIndex: 1,
+  },
+  darkCurrencySymbol: {
+    color: "#D69E2E",
   },
   amountInput: {
     paddingLeft: 35,
@@ -2288,7 +2355,7 @@ const styles = StyleSheet.create({
   darkTextInput: {
     backgroundColor: "#1A202C",
     borderColor: "#4A5568",
-    color: "#E2E8F0",
+    color: "#FFFFFF",
   },
   noteInput: {
     height: 80,
@@ -2303,9 +2370,16 @@ const styles = StyleSheet.create({
     padding: 16,
     backgroundColor: "#fff",
   },
+  darkDateButton: {
+    backgroundColor: "#1A202C",
+    borderColor: "#4A5568",
+  },
   dateButtonText: {
     fontSize: 16,
     color: "#374151",
+  },
+  darkDateButtonText: {
+    color: "#FFFFFF",
   },
   dropdown: {
     borderWidth: 1,
@@ -2333,9 +2407,27 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: "#374151",
   },
+  darkDropdownText: {
+    color: "#FFFFFF",
+  },
   dropdownPlaceholder: {
     fontSize: 16,
     color: "#9CA3AF",
+  },
+  darkDropdownPlaceholder: {
+    color: "#A0AEC0",
+  },
+  searchTextInput: {
+    color: "#374151",
+  },
+  darkSearchTextInput: {
+    color: "#FFFFFF",
+  },
+  badgeTextStyle: {
+    color: "#000000",
+  },
+  darkBadgeTextStyle: {
+    color: "#FFFFFF",
   },
   inputError: {
     borderColor: "#EF4444",
@@ -2355,6 +2447,10 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: "#E5E7EB",
   },
+  darkModalActions: {
+    backgroundColor: "#2D3748", // Add background color
+    borderTopColor: "#4A5568",
+  },
   modalButton: {
     flex: 1,
     paddingVertical: 16,
@@ -2366,6 +2462,10 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#D1D5DB",
   },
+  darkCancelButton: {
+    backgroundColor: "#4A5568",
+    borderColor: "#718096",
+  },
   saveButton: {
     backgroundColor: "#2356A8",
   },
@@ -2373,6 +2473,9 @@ const styles = StyleSheet.create({
     color: "#374151",
     fontSize: 16,
     fontWeight: "600",
+  },
+  darkCancelButtonText: {
+    color: "#FFFFFF",
   },
   saveButtonText: {
     color: "#fff",
@@ -2400,11 +2503,17 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     textAlign: "center",
   },
+  darkBillDetailsName: {
+    color: "#FFFFFF",
+  },
   billDetailsAmount: {
     fontSize: 32,
     fontWeight: "800",
     color: "#8B4513", // Brown theme
     marginBottom: 8,
+  },
+  darkBillDetailsAmount: {
+    color: "#D69E2E",
   },
   billDetailsDate: {
     fontSize: 16,
@@ -2449,16 +2558,25 @@ const styles = StyleSheet.create({
     fontWeight: "500",
     color: "#374151",
   },
+  darkPayerLabel: {
+    color: "#FFFFFF",
+  },
   payerName: {
     fontSize: 18,
     fontWeight: "600",
     color: "#374151",
     marginBottom: 4,
   },
+  darkPayerName: {
+    color: "#FFFFFF",
+  },
   payerAmount: {
     fontSize: 20,
     fontWeight: "700",
     color: "#4CAF50",
+  },
+  darkPayerAmount: {
+    color: "#68D391",
   },
   splitMembersTitle: {
     fontSize: 16,
@@ -2482,6 +2600,10 @@ const styles = StyleSheet.create({
     backgroundColor: "#FEF3C7",
     borderColor: "#F59E0B",
   },
+  darkPayerHighlight: {
+    backgroundColor: "#744210",
+    borderColor: "#D69E2E",
+  },
   splitMemberInfo: {
     flex: 1,
   },
@@ -2496,6 +2618,9 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: "#374151",
     flex: 1,
+  },
+  darkSplitMemberName: {
+    color: "#FFFFFF",
   },
   payerBadge: {
     backgroundColor: "#F59E0B",
@@ -2519,6 +2644,9 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: "#8B4513", // Brown theme
   },
+  darkSplitAmount: {
+    color: "#D69E2E",
+  },
   splitPercentage: {
     fontSize: 14,
     color: "#6B7280",
@@ -2528,6 +2656,9 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: "#EF4444",
     fontWeight: "500",
+  },
+  darkOwesText: {
+    color: "#FC8181",
   },
   splitTypeCard: {
     backgroundColor: "#F3F8FF",
@@ -2545,5 +2676,8 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: "#8B4513", // Brown theme
     textAlign: "center",
+  },
+  darkSplitTypeText: {
+    color: "#D69E2E",
   },
 });
