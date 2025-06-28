@@ -78,7 +78,7 @@ const GroupCard = React.memo(
             >
               {group.name || "Unnamed Group"}
             </Text>
-            <Text style={[styles.groupBalance, darkMode && styles.darkAmount]}>
+            <Text style={[styles.groupBalance, darkMode && styles.darkGroupBalance]}>
               {getCurrencySymbol(group.currency || "USD")}
               {calculateGroupBalance().toFixed(2)}
             </Text>
@@ -95,7 +95,7 @@ const GroupCard = React.memo(
                 onEdit(group);
               }}
             >
-              <Ionicons name="pencil" size={16} color="#1976D2" />
+              <Ionicons name="pencil" size={16} color="#8B4513" />
             </Pressable>
             <Pressable
               style={({ pressed }) => [
@@ -589,7 +589,7 @@ export default function GroupsScreen({
         style={[styles.container, darkMode && styles.darkContainer]}
       >
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#2356A8" />
+          <ActivityIndicator size="large" color={darkMode ? "#D69E2E" : "#8B4513"} />
           <Text style={[styles.loadingText, darkMode && styles.darkText]}>
             Loading groups...
           </Text>
@@ -654,6 +654,7 @@ export default function GroupsScreen({
           <Pressable
             style={({ pressed }) => [
               styles.addGroupButton,
+              darkMode && styles.darkAddGroupButton,
               pressed && styles.addGroupButtonPressed,
             ]}
             onPress={() => setShowCreateGroup(true)}
@@ -678,8 +679,8 @@ export default function GroupsScreen({
             <RefreshControl
               refreshing={refreshing}
               onRefresh={onRefresh}
-              colors={["#2356A8"]}
-              tintColor="#2356A8"
+              colors={[darkMode ? "#D69E2E" : "#8B4513"]}
+              tintColor={darkMode ? "#D69E2E" : "#8B4513"}
             />
           }
           ItemSeparatorComponent={() => <View style={styles.itemSeparator} />}
@@ -1185,7 +1186,7 @@ export default function GroupsScreen({
                 ]}
               >
                 <Text
-                  style={[styles.modalTitle, darkMode && styles.darkText]}
+                  style={[styles.modalTitle, darkMode && styles.darkModalTitle]}
                   numberOfLines={1}
                 >
                   {selectedGroup?.name || "Group Details"}
@@ -1195,8 +1196,8 @@ export default function GroupsScreen({
                     onPress={() => setShowAddExpense(true)}
                     style={styles.addExpenseButton}
                   >
-                    <Ionicons name="add" size={16} color="#2356A8" />
-                    <Text style={styles.addExpenseButtonText}>Add Expense</Text>
+                    <Ionicons name="add" size={16} color={darkMode ? "#D69E2E" : "#8B4513"} />
+                    <Text style={[styles.addExpenseButtonText, darkMode && styles.darkAddExpenseButtonText]}>Add Expense</Text>
                   </TouchableOpacity>
                   <TouchableOpacity
                     onPress={() => {
@@ -1223,7 +1224,7 @@ export default function GroupsScreen({
                 <View style={styles.groupInfoSection}>
                   <View style={styles.groupInfoCard}>
                     <View style={styles.groupInfoRow}>
-                      <Ionicons name="people" size={20} color="#2356A8" />
+                      <Ionicons name="people" size={20} color={darkMode ? "#D69E2E" : "#8B4513"} />
                       <Text
                         style={[
                           styles.groupInfoLabel,
@@ -1242,7 +1243,7 @@ export default function GroupsScreen({
                       </Text>
                     </View>
                     <View style={styles.groupInfoRow}>
-                      <Ionicons name="receipt" size={20} color="#2356A8" />
+                      <Ionicons name="receipt" size={20} color={darkMode ? "#D69E2E" : "#8B4513"} />
                       <Text
                         style={[
                           styles.groupInfoLabel,
@@ -1261,7 +1262,7 @@ export default function GroupsScreen({
                       </Text>
                     </View>
                     <View style={styles.groupInfoRow}>
-                      <Ionicons name="cash" size={20} color="#2356A8" />
+                      <Ionicons name="cash" size={20} color={darkMode ? "#D69E2E" : "#8B4513"} />
                       <Text
                         style={[
                           styles.groupInfoLabel,
@@ -1760,7 +1761,7 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 28,
     fontWeight: "700",
-    color: "#2356A8",
+    color: "#8B4513", // Brown theme
     marginBottom: 6,
   },
   subtitle: {
@@ -1818,15 +1819,19 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#2356A8",
+    backgroundColor: "#8B4513",
     borderRadius: 12,
     paddingVertical: 16,
-    shadowColor: "#2356A8",
+    shadowColor: "#8B4513",
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 8,
     elevation: 6,
     gap: 8,
+  },
+  darkAddGroupButton: {
+    backgroundColor: "#D69E2E",
+    shadowColor: "#D69E2E",
   },
   addGroupButtonPressed: {
     opacity: 0.8,
@@ -1888,7 +1893,10 @@ const styles = StyleSheet.create({
   groupBalance: {
     fontSize: 24,
     fontWeight: "700",
-    color: "#2356A8",
+    color: "#8B4513",
+  },
+  darkGroupBalance: {
+    color: "#D69E2E",
   },
   groupActions: {
     flexDirection: "row",
@@ -1976,13 +1984,13 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   clearSearchButton: {
-    backgroundColor: "#2356A8",
+    backgroundColor: "#8B4513",
     paddingHorizontal: 20,
     paddingVertical: 12,
     borderRadius: 8,
   },
   darkClearSearchButton: {
-    backgroundColor: "#4A90E2",
+    backgroundColor: "#D69E2E",
   },
   clearSearchText: {
     color: "#fff",
@@ -2024,8 +2032,11 @@ const styles = StyleSheet.create({
   modalTitle: {
     fontSize: 24,
     fontWeight: "700",
-    color: "#2356A8",
+    color: "#8B4513",
     flex: 1,
+  },
+  darkModalTitle: {
+    color: "#D69E2E",
   },
   modalHeaderActions: {
     flexDirection: "row",
@@ -2042,9 +2053,12 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   addExpenseButtonText: {
-    color: "#2356A8",
+    color: "#8B4513",
     fontSize: 14,
     fontWeight: "600",
+  },
+  darkAddExpenseButtonText: {
+    color: "#D69E2E",
   },
   closeModalButton: {
     padding: 4,
@@ -2091,8 +2105,11 @@ const styles = StyleSheet.create({
     top: 16,
     fontSize: 16,
     fontWeight: "600",
-    color: "#2356A8",
+    color: "#8B4513",
     zIndex: 1,
+  },
+  darkCurrencySymbol: {
+    color: "#D69E2E",
   },
   dropdown: {
     borderWidth: 1,
