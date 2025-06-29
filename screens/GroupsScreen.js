@@ -83,96 +83,179 @@ const GroupCard = React.memo(
               {calculateGroupBalance().toFixed(2)}
             </Text>
           </View>
-          <View style={styles.groupActions}>
+        </View>
+
+        {/* Action Buttons - matching Friends/History screen styling */}
+          <View
+            style={{
+              flexDirection: "row",
+              justifyContent: "space-between",
+              gap: 6,
+              marginTop: 8,
+            }}
+          >
+            {/* Add Members Button */}
             <Pressable
+              onPress={(e) => {
+                e.stopPropagation();
+                // TODO: Implement add members functionality
+                console.log("Add members to", group.name);
+              }}
               style={({ pressed }) => [
-                styles.actionIconButton,
-                styles.editIconButton,
-                pressed && styles.actionIconPressed,
+                {
+                  backgroundColor: darkMode ? "#2D4A34" : "#F1F8E9",
+                  borderRadius: 14,
+                  paddingVertical: 8,
+                  paddingHorizontal: 10,
+                  flex: 1,
+                  alignItems: "center",
+                  borderWidth: 1,
+                  borderColor: darkMode ? "#4CAF50" : "#C8E6C9",
+                },
+                pressed && { opacity: 0.7 },
               ]}
+            >
+              <Text
+                style={{
+                  fontSize: 12,
+                  color: darkMode ? "#81C784" : "#388E3C",
+                  fontWeight: "500",
+                }}
+              >
+                Members
+              </Text>
+            </Pressable>
+
+            {/* Edit Button */}
+            <Pressable
               onPress={(e) => {
                 e.stopPropagation();
                 onEdit(group);
               }}
-            >
-              <Ionicons name="pencil" size={16} color="#8B4513" />
-            </Pressable>
-            <Pressable
               style={({ pressed }) => [
-                styles.actionIconButton,
-                styles.deleteIconButton,
-                pressed && styles.actionIconPressed,
+                {
+                  backgroundColor: darkMode ? "#3D3D3D" : "#F8F4E8",
+                  borderRadius: 14,
+                  paddingVertical: 8,
+                  paddingHorizontal: 10,
+                  flex: 1,
+                  alignItems: "center",
+                  borderWidth: 1,
+                  borderColor: darkMode ? "#D69E2E" : "#D4A574",
+                },
+                pressed && { opacity: 0.7 },
               ]}
+            >
+              <Text
+                style={{
+                  fontSize: 12,
+                  color: darkMode ? "#D69E2E" : "#8B4513",
+                  fontWeight: "500",
+                }}
+              >
+                Edit
+              </Text>
+            </Pressable>
+
+            {/* Delete Button */}
+            <Pressable
               onPress={(e) => {
                 e.stopPropagation();
                 onDelete(group.id);
               }}
+              style={({ pressed }) => [
+                {
+                  backgroundColor: darkMode ? "#4A2C2C" : "#FFEBEE",
+                  borderRadius: 14,
+                  paddingVertical: 8,
+                  paddingHorizontal: 10,
+                  flex: 1,
+                  alignItems: "center",
+                  borderWidth: 1,
+                  borderColor: darkMode ? "#F44336" : "#FFCDD2",
+                },
+                pressed && { opacity: 0.7 },
+              ]}
             >
-              <Ionicons name="trash" size={16} color="#D32F2F" />
+              <Text
+                style={{
+                  fontSize: 12,
+                  color: darkMode ? "#EF5350" : "#D32F2F",
+                  fontWeight: "500",
+                }}
+              >
+                Delete
+              </Text>
             </Pressable>
           </View>
         </View>
 
+        {/* Enhanced Group Details Section */}
         <View style={styles.groupDetails}>
-          <View style={styles.groupDetailRow}>
-            <Ionicons
-              name="people"
-              size={14}
-              color={darkMode ? "#A0AEC0" : "#6B7280"}
-            />
-            <Text
-              style={[styles.groupDetailText, darkMode && styles.darkSubtext]}
-            >
-              {group.members && group.members.length > 0
-                ? `${group.members.length} member${
-                    group.members.length !== 1 ? "s" : ""
-                  }`
-                : "No members"}
-            </Text>
-          </View>
-
-          <View style={styles.groupDetailRow}>
-            <Ionicons
-              name="receipt"
-              size={14}
-              color={darkMode ? "#A0AEC0" : "#6B7280"}
-            />
-            <Text
-              style={[styles.groupDetailText, darkMode && styles.darkSubtext]}
-            >
-              {group.bills ? group.bills.length : 0} expense
-              {(group.bills?.length || 0) !== 1 ? "s" : ""}
-            </Text>
-          </View>
-
-          <View style={styles.groupDetailRow}>
-            <Ionicons
-              name="time"
-              size={14}
-              color={darkMode ? "#A0AEC0" : "#6B7280"}
-            />
-            <Text
-              style={[styles.groupDetailText, darkMode && styles.darkSubtext]}
-              numberOfLines={1}
-            >
-              {getRecentActivity()}
-            </Text>
-          </View>
-
-          {group.description && (
-            <View style={styles.groupDetailRow}>
+          <View style={[styles.groupStatsRow, darkMode && styles.darkGroupStatsRow]}>
+            <View style={styles.statItem}>
               <Ionicons
-                name="document-text"
-                size={14}
+                name="people"
+                size={16}
                 color={darkMode ? "#A0AEC0" : "#6B7280"}
               />
               <Text
-                style={[styles.groupNote, darkMode && styles.darkSubtext]}
-                numberOfLines={2}
+                style={[styles.statText, darkMode && styles.darkSubtext]}
               >
-                {group.description}
+                {group.members && group.members.length > 0
+                  ? group.members.length
+                  : 0}
               </Text>
             </View>
+
+            <View style={styles.statItem}>
+              <Ionicons
+                name="receipt"
+                size={16}
+                color={darkMode ? "#A0AEC0" : "#6B7280"}
+              />
+              <Text
+                style={[styles.statText, darkMode && styles.darkSubtext]}
+              >
+                {group.bills ? group.bills.length : 0}
+              </Text>
+            </View>
+
+            <View style={styles.statItem}>
+              <Ionicons
+                name="time"
+                size={16}
+                color={darkMode ? "#A0AEC0" : "#6B7280"}
+              />
+              <Text
+                style={[styles.statText, darkMode && styles.darkSubtext]}
+                numberOfLines={1}
+              >
+                {group.bills && group.bills.length > 0 ? "Active" : "No activity"}
+              </Text>
+            </View>
+          </View>
+
+          {/* Recent Expense Preview */}
+          {group.bills && group.bills.length > 0 && (
+            <View style={[styles.recentExpensePreview, darkMode && styles.darkRecentExpensePreview]}>
+              <Text style={[styles.recentExpenseLabel, darkMode && styles.darkSubtext]}>
+                Latest: {group.bills[group.bills.length - 1]?.description || "Expense"}
+              </Text>
+              <Text style={[styles.recentExpenseAmount, darkMode && styles.darkAmount]}>
+                {getCurrencySymbol(group.currency || "USD")}
+                {group.bills[group.bills.length - 1]?.amount?.toFixed(2) || "0.00"}
+              </Text>
+            </View>
+          )}
+
+          {group.description && (
+            <Text
+              style={[styles.groupDescription, darkMode && styles.darkSubtext]}
+              numberOfLines={2}
+            >
+              {group.description}
+            </Text>
           )}
         </View>
       </Pressable>
@@ -589,7 +672,10 @@ export default function GroupsScreen({
         style={[styles.container, darkMode && styles.darkContainer]}
       >
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={darkMode ? "#D69E2E" : "#8B4513"} />
+          <ActivityIndicator
+            size="large"
+            color={darkMode ? "#D69E2E" : "#8B4513"}
+          />
           <Text style={[styles.loadingText, darkMode && styles.darkText]}>
             Loading groups...
           </Text>
@@ -605,7 +691,7 @@ export default function GroupsScreen({
       >
         {/* Header */}
         <View style={styles.header}>
-          <Text style={[styles.title, darkMode && styles.darkText]}>
+          <Text style={[styles.title, darkMode && styles.darkTitle]}>
             Groups
           </Text>
           <Text style={[styles.subtitle, darkMode && styles.darkSubtext]}>
@@ -654,7 +740,6 @@ export default function GroupsScreen({
           <Pressable
             style={({ pressed }) => [
               styles.addGroupButton,
-              darkMode && styles.darkAddGroupButton,
               pressed && styles.addGroupButtonPressed,
             ]}
             onPress={() => setShowCreateGroup(true)}
@@ -910,7 +995,11 @@ export default function GroupsScreen({
                 </TouchableOpacity>
                 <TouchableOpacity
                   onPress={createGroup}
-                  style={[styles.modalButton, styles.saveButton]}
+                  style={[
+                    styles.modalButton,
+                    styles.saveButton,
+                    darkMode && styles.darkSaveButton,
+                  ]}
                   disabled={isSubmitting}
                 >
                   {isSubmitting ? (
@@ -1150,7 +1239,11 @@ export default function GroupsScreen({
                 </TouchableOpacity>
                 <TouchableOpacity
                   onPress={editGroup}
-                  style={[styles.modalButton, styles.saveButton]}
+                  style={[
+                    styles.modalButton,
+                    styles.saveButton,
+                    darkMode && styles.darkSaveButton,
+                  ]}
                   disabled={isSubmitting}
                 >
                   {isSubmitting ? (
@@ -1186,7 +1279,7 @@ export default function GroupsScreen({
                 ]}
               >
                 <Text
-                  style={[styles.modalTitle, darkMode && styles.darkModalTitle]}
+                  style={[styles.modalTitle, darkMode && styles.darkText]}
                   numberOfLines={1}
                 >
                   {selectedGroup?.name || "Group Details"}
@@ -1196,8 +1289,12 @@ export default function GroupsScreen({
                     onPress={() => setShowAddExpense(true)}
                     style={styles.addExpenseButton}
                   >
-                    <Ionicons name="add" size={16} color={darkMode ? "#D69E2E" : "#8B4513"} />
-                    <Text style={[styles.addExpenseButtonText, darkMode && styles.darkAddExpenseButtonText]}>Add Expense</Text>
+                    <Ionicons
+                      name="add"
+                      size={16}
+                      color={darkMode ? "#D69E2E" : "#8B4513"}
+                    />
+                    <Text style={styles.addExpenseButtonText}>Add Expense</Text>
                   </TouchableOpacity>
                   <TouchableOpacity
                     onPress={() => {
@@ -1224,7 +1321,11 @@ export default function GroupsScreen({
                 <View style={styles.groupInfoSection}>
                   <View style={styles.groupInfoCard}>
                     <View style={styles.groupInfoRow}>
-                      <Ionicons name="people" size={20} color={darkMode ? "#D69E2E" : "#8B4513"} />
+                      <Ionicons
+                        name="people"
+                        size={20}
+                        color={darkMode ? "#D69E2E" : "#8B4513"}
+                      />
                       <Text
                         style={[
                           styles.groupInfoLabel,
@@ -1243,7 +1344,11 @@ export default function GroupsScreen({
                       </Text>
                     </View>
                     <View style={styles.groupInfoRow}>
-                      <Ionicons name="receipt" size={20} color={darkMode ? "#D69E2E" : "#8B4513"} />
+                      <Ionicons
+                        name="receipt"
+                        size={20}
+                        color={darkMode ? "#D69E2E" : "#8B4513"}
+                      />
                       <Text
                         style={[
                           styles.groupInfoLabel,
@@ -1262,7 +1367,11 @@ export default function GroupsScreen({
                       </Text>
                     </View>
                     <View style={styles.groupInfoRow}>
-                      <Ionicons name="cash" size={20} color={darkMode ? "#D69E2E" : "#8B4513"} />
+                      <Ionicons
+                        name="cash"
+                        size={20}
+                        color={darkMode ? "#D69E2E" : "#8B4513"}
+                      />
                       <Text
                         style={[
                           styles.groupInfoLabel,
@@ -1726,7 +1835,11 @@ export default function GroupsScreen({
                 </TouchableOpacity>
                 <TouchableOpacity
                   onPress={addExpenseToGroup}
-                  style={[styles.modalButton, styles.saveButton]}
+                  style={[
+                    styles.modalButton,
+                    styles.saveButton,
+                    darkMode && styles.darkSaveButton,
+                  ]}
                   disabled={isSubmitting}
                 >
                   {isSubmitting ? (
@@ -1763,6 +1876,9 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: "#8B4513", // Brown theme
     marginBottom: 6,
+  },
+  darkTitle: {
+    color: "#D69E2E", // Gold in dark mode
   },
   subtitle: {
     fontSize: 16,
@@ -1821,7 +1937,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     backgroundColor: "#8B4513",
     borderRadius: 12,
-    paddingVertical: 16,
+    paddingVertical: 12,
     shadowColor: "#8B4513",
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
@@ -1832,6 +1948,9 @@ const styles = StyleSheet.create({
   darkAddGroupButton: {
     backgroundColor: "#D69E2E",
     shadowColor: "#D69E2E",
+  },
+  darkSaveButton: {
+    backgroundColor: "#D69E2E",
   },
   addGroupButtonPressed: {
     opacity: 0.8,
@@ -1898,44 +2017,58 @@ const styles = StyleSheet.create({
   darkGroupBalance: {
     color: "#D69E2E",
   },
-  groupActions: {
-    flexDirection: "row",
-    gap: 8,
-  },
-  actionIconButton: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  editIconButton: {
-    backgroundColor: "#F3F8FF",
-  },
-  deleteIconButton: {
-    backgroundColor: "#FFF5F5",
-  },
-  actionIconPressed: {
-    opacity: 0.7,
-  },
   groupDetails: {
-    gap: 6,
-  },
-  groupDetailRow: {
-    flexDirection: "row",
-    alignItems: "center",
     gap: 8,
   },
-  groupDetailText: {
-    fontSize: 14,
+  groupStatsRow: {
+    flexDirection: "row",
+    justifyContent: "space-around",
+    alignItems: "center",
+    paddingVertical: 8,
+    borderRadius: 8,
+    backgroundColor: "#F8F9FA",
+  },
+  darkGroupStatsRow: {
+    backgroundColor: "#1A202C",
+  },
+  statItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+  statText: {
+    fontSize: 13,
     color: "#6B7280",
+    fontWeight: "500",
+  },
+  recentExpensePreview: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingVertical: 6,
+    paddingHorizontal: 8,
+    backgroundColor: "#F1F5F9",
+    borderRadius: 6,
+    marginTop: 4,
+  },
+  darkRecentExpensePreview: {
+    backgroundColor: "#2D3748",
+  },
+  recentExpenseLabel: {
+    fontSize: 12,
+    color: "#64748B",
     flex: 1,
   },
-  groupNote: {
-    fontSize: 14,
+  recentExpenseAmount: {
+    fontSize: 12,
+    color: "#8B4513",
+    fontWeight: "600",
+  },
+  groupDescription: {
+    fontSize: 13,
     color: "#6B7280",
     fontStyle: "italic",
-    flex: 1,
+    marginTop: 4,
   },
 
   // Loading
@@ -2010,7 +2143,8 @@ const styles = StyleSheet.create({
     backgroundColor: "#fff",
     borderRadius: 20,
     width: "100%",
-    maxHeight: "90%",
+    maxHeight: "85%",
+    minHeight: "60%",
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 10 },
     shadowOpacity: 0.25,
@@ -2035,9 +2169,6 @@ const styles = StyleSheet.create({
     color: "#8B4513",
     flex: 1,
   },
-  darkModalTitle: {
-    color: "#D69E2E",
-  },
   modalHeaderActions: {
     flexDirection: "row",
     alignItems: "center",
@@ -2056,9 +2187,6 @@ const styles = StyleSheet.create({
     color: "#8B4513",
     fontSize: 14,
     fontWeight: "600",
-  },
-  darkAddExpenseButtonText: {
-    color: "#D69E2E",
   },
   closeModalButton: {
     padding: 4,
@@ -2107,9 +2235,6 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: "#8B4513",
     zIndex: 1,
-  },
-  darkCurrencySymbol: {
-    color: "#D69E2E",
   },
   dropdown: {
     borderWidth: 1,
