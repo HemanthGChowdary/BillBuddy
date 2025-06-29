@@ -86,108 +86,107 @@ const GroupCard = React.memo(
         </View>
 
         {/* Action Buttons - matching Friends/History screen styling */}
-          <View
-            style={{
-              flexDirection: "row",
-              justifyContent: "space-between",
-              gap: 6,
-              marginTop: 8,
+        <View
+          style={{
+            flexDirection: "row",
+            justifyContent: "space-between",
+            gap: 6,
+            marginTop: 8,
+          }}
+        >
+          {/* Add Members Button */}
+          <Pressable
+            onPress={(e) => {
+              e.stopPropagation();
+              setSelectedGroup(group);
+              setShowAddMembers(true);
             }}
+            style={({ pressed }) => [
+              {
+                backgroundColor: darkMode ? "#2D4A34" : "#F1F8E9",
+                borderRadius: 14,
+                paddingVertical: 8,
+                paddingHorizontal: 10,
+                flex: 1,
+                alignItems: "center",
+                borderWidth: 1,
+                borderColor: darkMode ? "#4CAF50" : "#C8E6C9",
+              },
+              pressed && { opacity: 0.7 },
+            ]}
           >
-            {/* Add Members Button */}
-            <Pressable
-              onPress={(e) => {
-                e.stopPropagation();
-                // TODO: Implement add members functionality
-                console.log("Add members to", group.name);
+            <Text
+              style={{
+                fontSize: 12,
+                color: darkMode ? "#81C784" : "#388E3C",
+                fontWeight: "500",
               }}
-              style={({ pressed }) => [
-                {
-                  backgroundColor: darkMode ? "#2D4A34" : "#F1F8E9",
-                  borderRadius: 14,
-                  paddingVertical: 8,
-                  paddingHorizontal: 10,
-                  flex: 1,
-                  alignItems: "center",
-                  borderWidth: 1,
-                  borderColor: darkMode ? "#4CAF50" : "#C8E6C9",
-                },
-                pressed && { opacity: 0.7 },
-              ]}
             >
-              <Text
-                style={{
-                  fontSize: 12,
-                  color: darkMode ? "#81C784" : "#388E3C",
-                  fontWeight: "500",
-                }}
-              >
-                Members
-              </Text>
-            </Pressable>
+              Members
+            </Text>
+          </Pressable>
 
-            {/* Edit Button */}
-            <Pressable
-              onPress={(e) => {
-                e.stopPropagation();
-                onEdit(group);
+          {/* Edit Button */}
+          <Pressable
+            onPress={(e) => {
+              e.stopPropagation();
+              onEdit(group);
+            }}
+            style={({ pressed }) => [
+              {
+                backgroundColor: darkMode ? "#3D3D3D" : "#F8F4E8",
+                borderRadius: 14,
+                paddingVertical: 8,
+                paddingHorizontal: 10,
+                flex: 1,
+                alignItems: "center",
+                borderWidth: 1,
+                borderColor: darkMode ? "#D69E2E" : "#D4A574",
+              },
+              pressed && { opacity: 0.7 },
+            ]}
+          >
+            <Text
+              style={{
+                fontSize: 12,
+                color: darkMode ? "#D69E2E" : "#8B4513",
+                fontWeight: "500",
               }}
-              style={({ pressed }) => [
-                {
-                  backgroundColor: darkMode ? "#3D3D3D" : "#F8F4E8",
-                  borderRadius: 14,
-                  paddingVertical: 8,
-                  paddingHorizontal: 10,
-                  flex: 1,
-                  alignItems: "center",
-                  borderWidth: 1,
-                  borderColor: darkMode ? "#D69E2E" : "#D4A574",
-                },
-                pressed && { opacity: 0.7 },
-              ]}
             >
-              <Text
-                style={{
-                  fontSize: 12,
-                  color: darkMode ? "#D69E2E" : "#8B4513",
-                  fontWeight: "500",
-                }}
-              >
-                Edit
-              </Text>
-            </Pressable>
+              Edit
+            </Text>
+          </Pressable>
 
-            {/* Delete Button */}
-            <Pressable
-              onPress={(e) => {
-                e.stopPropagation();
-                onDelete(group.id);
+          {/* Delete Button */}
+          <Pressable
+            onPress={(e) => {
+              e.stopPropagation();
+              onDelete(group.id);
+            }}
+            style={({ pressed }) => [
+              {
+                backgroundColor: darkMode ? "#4A2C2C" : "#FFEBEE",
+                borderRadius: 14,
+                paddingVertical: 8,
+                paddingHorizontal: 10,
+                flex: 1,
+                alignItems: "center",
+                borderWidth: 1,
+                borderColor: darkMode ? "#F44336" : "#FFCDD2",
+              },
+              pressed && { opacity: 0.7 },
+            ]}
+          >
+            <Text
+              style={{
+                fontSize: 12,
+                color: darkMode ? "#EF5350" : "#D32F2F",
+                fontWeight: "500",
               }}
-              style={({ pressed }) => [
-                {
-                  backgroundColor: darkMode ? "#4A2C2C" : "#FFEBEE",
-                  borderRadius: 14,
-                  paddingVertical: 8,
-                  paddingHorizontal: 10,
-                  flex: 1,
-                  alignItems: "center",
-                  borderWidth: 1,
-                  borderColor: darkMode ? "#F44336" : "#FFCDD2",
-                },
-                pressed && { opacity: 0.7 },
-              ]}
             >
-              <Text
-                style={{
-                  fontSize: 12,
-                  color: darkMode ? "#EF5350" : "#D32F2F",
-                  fontWeight: "500",
-                }}
-              >
-                Delete
-              </Text>
-            </Pressable>
-          </View>
+              Delete
+            </Text>
+          </Pressable>
         </View>
 
         {/* Enhanced Group Details Section */}
@@ -281,6 +280,7 @@ export default function GroupsScreen({
   const [showEditGroup, setShowEditGroup] = useState(false);
   const [showGroupDetails, setShowGroupDetails] = useState(false);
   const [showAddExpense, setShowAddExpense] = useState(false);
+  const [showAddMembers, setShowAddMembers] = useState(false);
   const [selectedGroup, setSelectedGroup] = useState(null);
   const [editingGroup, setEditingGroup] = useState(null);
 
@@ -1479,15 +1479,25 @@ export default function GroupsScreen({
                             ]}
                           >
                             <View style={styles.expenseHeader}>
-                              <Text
-                                style={[
-                                  styles.expenseName,
-                                  darkMode && styles.darkText,
-                                ]}
-                                numberOfLines={1}
-                              >
-                                {bill.name || bill.description}
-                              </Text>
+                              <View style={{ flex: 1 }}>
+                                <Text
+                                  style={[
+                                    styles.expenseName,
+                                    darkMode && styles.darkText,
+                                  ]}
+                                  numberOfLines={1}
+                                >
+                                  {bill.name || bill.description}
+                                </Text>
+                                <Text
+                                  style={[
+                                    styles.expenseDetail,
+                                    darkMode && styles.darkSubtext,
+                                  ]}
+                                >
+                                  Paid by {bill.payer || "Unknown"}
+                                </Text>
+                              </View>
                               <Text
                                 style={[
                                   styles.expenseAmount,
@@ -1502,15 +1512,61 @@ export default function GroupsScreen({
                                 {(bill.amount || 0).toFixed(2)}
                               </Text>
                             </View>
-                            <View style={styles.expenseDetails}>
-                              <Text
-                                style={[
-                                  styles.expenseDetail,
-                                  darkMode && styles.darkSubtext,
-                                ]}
-                              >
-                                Paid by {bill.payer || "Unknown"}
-                              </Text>
+
+                            {/* Who Owes Who Section */}
+                            {bill.splitWith && bill.splitWith.length > 0 && (
+                              <View style={[styles.splitDetails, darkMode && styles.darkSplitDetails]}>
+                                <Text
+                                  style={[
+                                    styles.splitTitle,
+                                    darkMode && styles.darkSubtext,
+                                  ]}
+                                >
+                                  Split between:
+                                </Text>
+                                <View style={styles.splitList}>
+                                  {bill.splitWith.map((person, index) => {
+                                    const shareAmount = (bill.amount || 0) / bill.splitWith.length;
+                                    const owesAmount = person === bill.payer ? 0 : shareAmount;
+                                    return (
+                                      <View key={index} style={styles.splitItem}>
+                                        <Text
+                                          style={[
+                                            styles.splitPerson,
+                                            darkMode && styles.darkText,
+                                          ]}
+                                        >
+                                          {person === you ? `${person} (You)` : person}
+                                        </Text>
+                                        {owesAmount > 0 && (
+                                          <Text
+                                            style={[
+                                              styles.owesAmount,
+                                              { color: "#F44336" },
+                                            ]}
+                                          >
+                                            owes {getCurrencySymbol(bill.currency || "USD")}
+                                            {owesAmount.toFixed(2)}
+                                          </Text>
+                                        )}
+                                        {owesAmount === 0 && (
+                                          <Text
+                                            style={[
+                                              styles.owesAmount,
+                                              { color: "#4CAF50" },
+                                            ]}
+                                          >
+                                            paid
+                                          </Text>
+                                        )}
+                                      </View>
+                                    );
+                                  })}
+                                </View>
+                              </View>
+                            )}
+
+                            <View style={styles.expenseFooter}>
                               <Text
                                 style={[
                                   styles.expenseDate,
@@ -1521,7 +1577,60 @@ export default function GroupsScreen({
                                   bill.date || bill.createdAt
                                 ).toLocaleDateString()}
                               </Text>
+                              
+                              {/* Edit and Delete buttons */}
+                              <View style={styles.expenseActions}>
+                                <Pressable
+                                  style={({ pressed }) => [
+                                    styles.expenseActionButton,
+                                    styles.editExpenseButton,
+                                    pressed && { opacity: 0.7 },
+                                  ]}
+                                  onPress={() => {
+                                    // TODO: Implement edit expense
+                                    Alert.alert("Edit Expense", "Edit functionality coming soon!");
+                                  }}
+                                >
+                                  <Text style={styles.editExpenseText}>Edit</Text>
+                                </Pressable>
+                                
+                                <Pressable
+                                  style={({ pressed }) => [
+                                    styles.expenseActionButton,
+                                    styles.deleteExpenseButton,
+                                    pressed && { opacity: 0.7 },
+                                  ]}
+                                  onPress={() => {
+                                    Alert.alert(
+                                      "Delete Expense",
+                                      `Are you sure you want to delete "${bill.name || bill.description}"?`,
+                                      [
+                                        { text: "Cancel", style: "cancel" },
+                                        {
+                                          text: "Delete",
+                                          style: "destructive",
+                                          onPress: () => {
+                                            const updatedGroups = groups.map(g => 
+                                              g.id === selectedGroup.id 
+                                                ? { 
+                                                    ...g, 
+                                                    bills: g.bills?.filter(b => b.id !== bill.id) || []
+                                                  }
+                                                : g
+                                            );
+                                            saveGroups(updatedGroups);
+                                            Alert.alert("Success", "Expense deleted!");
+                                          }
+                                        }
+                                      ]
+                                    );
+                                  }}
+                                >
+                                  <Text style={styles.deleteExpenseText}>Delete</Text>
+                                </Pressable>
+                              </View>
                             </View>
+
                             {bill.note && (
                               <Text
                                 style={[
@@ -1530,7 +1639,7 @@ export default function GroupsScreen({
                                 ]}
                                 numberOfLines={2}
                               >
-                                {bill.note}
+                                Note: {bill.note}
                               </Text>
                             )}
                           </View>
@@ -1850,6 +1959,115 @@ export default function GroupsScreen({
                 </TouchableOpacity>
               </View>
             </KeyboardAvoidingView>
+          </View>
+        </Modal>
+
+        {/* Add Members Modal */}
+        <Modal
+          visible={showAddMembers}
+          transparent
+          animationType="slide"
+          onRequestClose={() => {
+            setShowAddMembers(false);
+            setSelectedGroup(null);
+          }}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={[styles.modalContent, darkMode && styles.darkModalContent]}>
+              <View style={[styles.modalHeader, darkMode && styles.darkModalContent]}>
+                <Text style={[styles.modalTitle, darkMode && styles.darkText]}>
+                  Add Members to {selectedGroup?.name}
+                </Text>
+                <TouchableOpacity
+                  onPress={() => {
+                    setShowAddMembers(false);
+                    setSelectedGroup(null);
+                  }}
+                  style={styles.closeModalButton}
+                >
+                  <Ionicons
+                    name="close"
+                    size={24}
+                    color={darkMode ? "#E2E8F0" : "#374151"}
+                  />
+                </TouchableOpacity>
+              </View>
+
+              <ScrollView style={styles.modalScrollContainer}>
+                <Text style={[styles.inputLabel, darkMode && styles.darkText]}>
+                  Select Friends to Add:
+                </Text>
+                
+                {friends && friends.length > 0 ? (
+                  friends
+                    .filter(friend => !selectedGroup?.members?.includes(friend.name))
+                    .map((friend) => (
+                      <Pressable
+                        key={friend.name}
+                        style={({ pressed }) => [
+                          {
+                            flexDirection: "row",
+                            alignItems: "center",
+                            padding: 16,
+                            backgroundColor: darkMode ? "#2D3748" : "#F8F9FA",
+                            borderRadius: 12,
+                            marginBottom: 8,
+                            borderWidth: 1,
+                            borderColor: darkMode ? "#4A5568" : "#E2E8F0",
+                          },
+                          pressed && { opacity: 0.7 },
+                        ]}
+                        onPress={() => {
+                          // Add friend to group
+                          const updatedGroups = groups.map(g => 
+                            g.id === selectedGroup.id 
+                              ? { ...g, members: [...(g.members || []), friend.name] }
+                              : g
+                          );
+                          saveGroups(updatedGroups);
+                          Alert.alert("Success", `${friend.name} added to ${selectedGroup.name}!`);
+                        }}
+                      >
+                        <Text style={{ fontSize: 24, marginRight: 12 }}>
+                          {friend.emoji || "👤"}
+                        </Text>
+                        <View style={{ flex: 1 }}>
+                          <Text style={[
+                            { fontSize: 16, fontWeight: "500" },
+                            darkMode ? { color: "#E2E8F0" } : { color: "#374151" }
+                          ]}>
+                            {friend.name}
+                          </Text>
+                        </View>
+                        <Ionicons
+                          name="add-circle"
+                          size={24}
+                          color={darkMode ? "#4CAF50" : "#388E3C"}
+                        />
+                      </Pressable>
+                    ))
+                ) : (
+                  <Text style={[
+                    { textAlign: "center", fontSize: 16, marginTop: 20 },
+                    darkMode ? { color: "#A0AEC0" } : { color: "#6B7280" }
+                  ]}>
+                    No friends available to add or all friends are already members.
+                  </Text>
+                )}
+              </ScrollView>
+
+              <View style={styles.modalActions}>
+                <TouchableOpacity
+                  onPress={() => {
+                    setShowAddMembers(false);
+                    setSelectedGroup(null);
+                  }}
+                  style={[styles.modalButton, styles.cancelButton]}
+                >
+                  <Text style={styles.cancelButtonText}>Done</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
           </View>
         </Modal>
       </SafeAreaView>
@@ -2469,5 +2687,74 @@ const styles = StyleSheet.create({
     textAlign: "center",
     fontStyle: "italic",
     paddingVertical: 8,
+  },
+
+  // Enhanced Expense Styles
+  splitDetails: {
+    marginTop: 8,
+    marginBottom: 8,
+    padding: 8,
+    backgroundColor: "#F8F9FA",
+    borderRadius: 8,
+  },
+  darkSplitDetails: {
+    backgroundColor: "#1A202C",
+  },
+  splitTitle: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#6B7280",
+    marginBottom: 6,
+  },
+  splitList: {
+    gap: 4,
+  },
+  splitItem: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  splitPerson: {
+    fontSize: 13,
+    color: "#374151",
+    flex: 1,
+  },
+  owesAmount: {
+    fontSize: 12,
+    fontWeight: "500",
+  },
+  expenseFooter: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginTop: 8,
+  },
+  expenseActions: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  expenseActionButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  editExpenseButton: {
+    backgroundColor: "#F8F4E8",
+    borderColor: "#D4A574",
+  },
+  deleteExpenseButton: {
+    backgroundColor: "#FFEBEE",
+    borderColor: "#FFCDD2",
+  },
+  editExpenseText: {
+    fontSize: 12,
+    color: "#8B4513",
+    fontWeight: "500",
+  },
+  deleteExpenseText: {
+    fontSize: 12,
+    color: "#D32F2F",
+    fontWeight: "500",
   },
 });
