@@ -38,7 +38,7 @@ const getCurrencySymbol = (currency) => {
 
 // Optimized Group Card Component
 const GroupCard = React.memo(
-  ({ group, onPress, onEdit, onDelete, darkMode }) => {
+  ({ group, onPress, onEdit, onDelete, onManageMembers, darkMode }) => {
     const formatDate = (dateString) => {
       const date = new Date(dateString);
       return date.toLocaleDateString("en-US", {
@@ -119,22 +119,6 @@ const GroupCard = React.memo(
                 {group.bills ? group.bills.length : 0}
               </Text>
             </View>
-
-            <View style={styles.statRow}>
-              <Ionicons
-                name="time"
-                size={16}
-                color={darkMode ? "#A0AEC0" : "#6B7280"}
-              />
-              <Text style={[styles.statLabel, darkMode && styles.darkSubtext]}>
-                Status
-              </Text>
-              <Text style={[styles.statValue, darkMode && styles.darkText]}>
-                {group.bills && group.bills.length > 0
-                  ? "Active"
-                  : "No activity"}
-              </Text>
-            </View>
           </View>
 
           {/* Recent Expense Preview */}
@@ -182,8 +166,7 @@ const GroupCard = React.memo(
             <Pressable
               onPress={(e) => {
                 e.stopPropagation();
-                setSelectedGroup(group);
-                setShowManageMembers(true);
+                onManageMembers(group);
               }}
               style={({ pressed }) => [
                 styles.actionButton,
@@ -210,7 +193,13 @@ const GroupCard = React.memo(
                 pressed && { opacity: 0.7 },
               ]}
             >
-              <Text style={[styles.actionButtonText, styles.editButtonText, darkMode && styles.darkEditButtonText]}>
+              <Text
+                style={[
+                  styles.actionButtonText,
+                  styles.editButtonText,
+                  darkMode && styles.darkEditButtonText,
+                ]}
+              >
                 Edit
               </Text>
             </Pressable>
@@ -347,10 +336,16 @@ export default function GroupsScreen({
 
   // Refresh handler
   const onRefresh = useCallback(async () => {
+    if (refreshing) return; // Prevent multiple simultaneous refreshes
     setRefreshing(true);
-    await loadGroups();
-    setRefreshing(false);
-  }, []);
+    try {
+      await loadGroups();
+    } catch (error) {
+      console.error("Refresh error:", error);
+    } finally {
+      setRefreshing(false);
+    }
+  }, [refreshing]);
 
   // Validation functions
   const validateGroupForm = () => {
@@ -598,6 +593,11 @@ export default function GroupsScreen({
     setShowEditGroup(true);
   };
 
+  const handleManageMembers = (group) => {
+    setSelectedGroup(group);
+    setShowManageMembers(true);
+  };
+
   const renderGroupItem = useCallback(
     ({ item }) => (
       <GroupCard
@@ -605,10 +605,17 @@ export default function GroupsScreen({
         onPress={handleGroupPress}
         onEdit={handleEditGroup}
         onDelete={deleteGroup}
+        onManageMembers={handleManageMembers}
         darkMode={darkMode}
       />
     ),
-    [darkMode]
+    [
+      darkMode,
+      handleGroupPress,
+      handleEditGroup,
+      deleteGroup,
+      handleManageMembers,
+    ]
   );
 
   const EmptyComponent = () => (
@@ -629,17 +636,18 @@ export default function GroupsScreen({
           : "Create your first group to start splitting expenses with friends!"}
       </Text>
       {searchQuery && (
-        <TouchableOpacity
+        <Pressable
           onPress={() => setSearchQuery("")}
-          style={[
+          style={({ pressed }) => [
             styles.clearSearchButton,
             darkMode && styles.darkClearSearchButton,
+            pressed && { opacity: 0.7 },
           ]}
         >
           <Text style={[styles.clearSearchText, darkMode && styles.darkText]}>
             Clear Search
           </Text>
-        </TouchableOpacity>
+        </Pressable>
       )}
     </View>
   );
@@ -699,16 +707,19 @@ export default function GroupsScreen({
               style={[styles.searchInput, darkMode && styles.darkText]}
             />
             {searchQuery.length > 0 && (
-              <TouchableOpacity
+              <Pressable
                 onPress={() => setSearchQuery("")}
-                style={styles.clearSearchIcon}
+                style={({ pressed }) => [
+                  styles.clearSearchIcon,
+                  pressed && { opacity: 0.5 },
+                ]}
               >
                 <Ionicons
                   name="close-circle"
                   size={20}
                   color={darkMode ? "#A0AEC0" : "#9CA3AF"}
                 />
-              </TouchableOpacity>
+              </Pressable>
             )}
           </View>
         </View>
@@ -718,6 +729,7 @@ export default function GroupsScreen({
           <Pressable
             style={({ pressed }) => [
               styles.addGroupButton,
+              darkMode && styles.darkAddGroupButton,
               pressed && styles.addGroupButtonPressed,
             ]}
             onPress={() => setShowCreateGroup(true)}
@@ -748,6 +760,11 @@ export default function GroupsScreen({
           }
           ItemSeparatorComponent={() => <View style={styles.itemSeparator} />}
           keyboardShouldPersistTaps="handled"
+          removeClippedSubviews={true}
+          maxToRenderPerBatch={10}
+          windowSize={10}
+          initialNumToRender={8}
+          updateCellsBatchingPeriod={50}
         />
 
         {/* Create Group Modal */}
@@ -763,7 +780,7 @@ export default function GroupsScreen({
         >
           <View style={styles.modalOverlay}>
             <KeyboardAvoidingView
-              style={styles.modalContent}
+              style={[styles.modalContent, darkMode && styles.darkModalContent]}
               behavior={Platform.OS === "ios" ? "padding" : undefined}
             >
               <View
@@ -775,19 +792,23 @@ export default function GroupsScreen({
                 <Text style={[styles.modalTitle, darkMode && styles.darkText]}>
                   Create Group
                 </Text>
-                <TouchableOpacity
+                <Pressable
                   onPress={() => {
                     closeAllDropdowns();
                     setShowCreateGroup(false);
                     resetGroupForm();
                   }}
+                  style={({ pressed }) => [
+                    { padding: 4 },
+                    pressed && { opacity: 0.5 },
+                  ]}
                 >
                   <Ionicons
                     name="close"
                     size={24}
                     color={darkMode ? "#E2E8F0" : "#374151"}
                   />
-                </TouchableOpacity>
+                </Pressable>
               </View>
 
               <ScrollView
@@ -933,8 +954,15 @@ export default function GroupsScreen({
                       searchable
                       searchPlaceholder="Search..."
                       listMode="SCROLLVIEW"
-                      scrollViewProps={{ keyboardShouldPersistTaps: "handled" }}
+                      scrollViewProps={{
+                        keyboardShouldPersistTaps: "handled",
+                        nestedScrollEnabled: true,
+                        showsVerticalScrollIndicator: true,
+                      }}
+                      maxHeight={300}
+                      dropDownDirection="AUTO"
                       zIndex={2000}
+                      autoScroll={true}
                       badgeColors={[
                         "#F2C4DE",
                         "#C4F2D2",
@@ -960,23 +988,28 @@ export default function GroupsScreen({
 
               {/* Actions */}
               <View style={styles.modalActions}>
-                <TouchableOpacity
+                <Pressable
                   onPress={() => {
                     closeAllDropdowns();
                     setShowCreateGroup(false);
                     resetGroupForm();
                   }}
-                  style={[styles.modalButton, styles.cancelButton]}
+                  style={({ pressed }) => [
+                    styles.modalButton,
+                    styles.cancelButton,
+                    pressed && { opacity: 0.7 },
+                  ]}
                   disabled={isSubmitting}
                 >
                   <Text style={styles.cancelButtonText}>Cancel</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
+                </Pressable>
+                <Pressable
                   onPress={createGroup}
-                  style={[
+                  style={({ pressed }) => [
                     styles.modalButton,
                     styles.saveButton,
                     darkMode && styles.darkSaveButton,
+                    pressed && { opacity: 0.8 },
                   ]}
                   disabled={isSubmitting}
                 >
@@ -985,7 +1018,7 @@ export default function GroupsScreen({
                   ) : (
                     <Text style={styles.saveButtonText}>Create Group</Text>
                   )}
-                </TouchableOpacity>
+                </Pressable>
               </View>
             </KeyboardAvoidingView>
           </View>
@@ -1005,7 +1038,7 @@ export default function GroupsScreen({
         >
           <View style={styles.modalOverlay}>
             <KeyboardAvoidingView
-              style={styles.modalContent}
+              style={[styles.modalContent, darkMode && styles.darkModalContent]}
               behavior={Platform.OS === "ios" ? "padding" : undefined}
             >
               <View
@@ -1017,20 +1050,24 @@ export default function GroupsScreen({
                 <Text style={[styles.modalTitle, darkMode && styles.darkText]}>
                   Edit Group
                 </Text>
-                <TouchableOpacity
+                <Pressable
                   onPress={() => {
                     closeAllDropdowns();
                     setShowEditGroup(false);
                     setEditingGroup(null);
                     resetGroupForm();
                   }}
+                  style={({ pressed }) => [
+                    { padding: 4 },
+                    pressed && { opacity: 0.5 },
+                  ]}
                 >
                   <Ionicons
                     name="close"
                     size={24}
                     color={darkMode ? "#E2E8F0" : "#374151"}
                   />
-                </TouchableOpacity>
+                </Pressable>
               </View>
 
               <ScrollView
@@ -1176,8 +1213,15 @@ export default function GroupsScreen({
                       searchable
                       searchPlaceholder="Search..."
                       listMode="SCROLLVIEW"
-                      scrollViewProps={{ keyboardShouldPersistTaps: "handled" }}
+                      scrollViewProps={{
+                        keyboardShouldPersistTaps: "handled",
+                        nestedScrollEnabled: true,
+                        showsVerticalScrollIndicator: true,
+                      }}
+                      maxHeight={300}
+                      dropDownDirection="AUTO"
                       zIndex={2000}
+                      autoScroll={true}
                       badgeColors={[
                         "#F2C4DE",
                         "#C4F2D2",
@@ -1203,24 +1247,29 @@ export default function GroupsScreen({
 
               {/* Actions */}
               <View style={styles.modalActions}>
-                <TouchableOpacity
+                <Pressable
                   onPress={() => {
                     closeAllDropdowns();
                     setShowEditGroup(false);
                     setEditingGroup(null);
                     resetGroupForm();
                   }}
-                  style={[styles.modalButton, styles.cancelButton]}
+                  style={({ pressed }) => [
+                    styles.modalButton,
+                    styles.cancelButton,
+                    pressed && { opacity: 0.7 },
+                  ]}
                   disabled={isSubmitting}
                 >
                   <Text style={styles.cancelButtonText}>Cancel</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
+                </Pressable>
+                <Pressable
                   onPress={editGroup}
-                  style={[
+                  style={({ pressed }) => [
                     styles.modalButton,
                     styles.saveButton,
                     darkMode && styles.darkSaveButton,
+                    pressed && { opacity: 0.8 },
                   ]}
                   disabled={isSubmitting}
                 >
@@ -1229,7 +1278,7 @@ export default function GroupsScreen({
                   ) : (
                     <Text style={styles.saveButtonText}>Save Changes</Text>
                   )}
-                </TouchableOpacity>
+                </Pressable>
               </View>
             </KeyboardAvoidingView>
           </View>
@@ -1247,7 +1296,7 @@ export default function GroupsScreen({
         >
           <View style={styles.modalOverlay}>
             <KeyboardAvoidingView
-              style={styles.modalContent}
+              style={[styles.modalContent, darkMode && styles.darkModalContent]}
               behavior={Platform.OS === "ios" ? "padding" : undefined}
             >
               <View
@@ -1695,7 +1744,7 @@ export default function GroupsScreen({
         >
           <View style={styles.modalOverlay}>
             <KeyboardAvoidingView
-              style={styles.modalContent}
+              style={[styles.modalContent, darkMode && styles.darkModalContent]}
               behavior={Platform.OS === "ios" ? "padding" : undefined}
             >
               <View
@@ -2011,7 +2060,12 @@ export default function GroupsScreen({
                 </TouchableOpacity>
               </View>
 
-              <ScrollView style={styles.modalScrollContainer}>
+              <ScrollView
+                style={styles.modalScrollContainer}
+                contentContainerStyle={{ paddingBottom: 20 }}
+                keyboardShouldPersistTaps="handled"
+                nestedScrollEnabled
+              >
                 <Text style={[styles.inputLabel, darkMode && styles.darkText]}>
                   Select Friends to Add:
                 </Text>
@@ -2115,8 +2169,16 @@ export default function GroupsScreen({
           }}
         >
           <View style={styles.modalOverlay}>
-            <View style={[styles.modalContent, darkMode && styles.darkModalContent]}>
-              <View style={[styles.modalHeader, darkMode && styles.darkModalContent]}>
+            <KeyboardAvoidingView
+              style={[styles.modalContent, darkMode && styles.darkModalContent]}
+              behavior={Platform.OS === "ios" ? "padding" : undefined}
+            >
+              <View
+                style={[
+                  styles.modalHeader,
+                  darkMode && styles.darkModalContent,
+                ]}
+              >
                 <Text style={[styles.modalTitle, darkMode && styles.darkText]}>
                   Members - {selectedGroup?.name}
                 </Text>
@@ -2135,12 +2197,17 @@ export default function GroupsScreen({
                 </TouchableOpacity>
               </View>
 
-              <ScrollView style={styles.modalScrollContainer}>
+              <ScrollView
+                style={styles.modalScrollContainer}
+                contentContainerStyle={{ paddingBottom: 20 }}
+                keyboardShouldPersistTaps="handled"
+                nestedScrollEnabled
+              >
                 {/* Current Members */}
                 <Text style={[styles.inputLabel, darkMode && styles.darkText]}>
                   Current Members ({selectedGroup?.members?.length || 0}):
                 </Text>
-                
+
                 {selectedGroup?.members && selectedGroup.members.length > 0 ? (
                   selectedGroup.members.map((member, index) => (
                     <View
@@ -2158,14 +2225,16 @@ export default function GroupsScreen({
                         },
                       ]}
                     >
-                      <Text style={{ fontSize: 24, marginRight: 12 }}>
-                        👤
-                      </Text>
+                      <Text style={{ fontSize: 24, marginRight: 12 }}>👤</Text>
                       <View style={{ flex: 1 }}>
-                        <Text style={[
-                          { fontSize: 16, fontWeight: "500" },
-                          darkMode ? { color: "#E2E8F0" } : { color: "#374151" }
-                        ]}>
+                        <Text
+                          style={[
+                            { fontSize: 16, fontWeight: "500" },
+                            darkMode
+                              ? { color: "#E2E8F0" }
+                              : { color: "#374151" },
+                          ]}
+                        >
                           {member === you ? `${member} (You)` : member}
                         </Text>
                       </View>
@@ -2191,22 +2260,30 @@ export default function GroupsScreen({
                                   text: "Remove",
                                   style: "destructive",
                                   onPress: () => {
-                                    const updatedGroups = groups.map(g => 
-                                      g.id === selectedGroup.id 
-                                        ? { 
-                                            ...g, 
-                                            members: g.members?.filter(m => m !== member) || []
+                                    const updatedGroups = groups.map((g) =>
+                                      g.id === selectedGroup.id
+                                        ? {
+                                            ...g,
+                                            members:
+                                              g.members?.filter(
+                                                (m) => m !== member
+                                              ) || [],
                                           }
                                         : g
                                     );
                                     saveGroups(updatedGroups);
                                     setSelectedGroup({
                                       ...selectedGroup,
-                                      members: selectedGroup.members.filter(m => m !== member)
+                                      members: selectedGroup.members.filter(
+                                        (m) => m !== member
+                                      ),
                                     });
-                                    Alert.alert("Success", `${member} removed from group!`);
-                                  }
-                                }
+                                    Alert.alert(
+                                      "Success",
+                                      `${member} removed from group!`
+                                    );
+                                  },
+                                },
                               ]
                             );
                           }}
@@ -2221,23 +2298,30 @@ export default function GroupsScreen({
                     </View>
                   ))
                 ) : (
-                  <Text style={[
-                    { textAlign: "center", fontSize: 16, marginVertical: 20 },
-                    darkMode ? { color: "#A0AEC0" } : { color: "#6B7280" }
-                  ]}>
+                  <Text
+                    style={[
+                      { textAlign: "center", fontSize: 16, marginVertical: 20 },
+                      darkMode ? { color: "#A0AEC0" } : { color: "#6B7280" },
+                    ]}
+                  >
                     No members in this group yet.
                   </Text>
                 )}
 
                 {/* Add More Members Section */}
                 <View style={{ marginTop: 24 }}>
-                  <Text style={[styles.inputLabel, darkMode && styles.darkText]}>
+                  <Text
+                    style={[styles.inputLabel, darkMode && styles.darkText]}
+                  >
                     Add More Members:
                   </Text>
-                  
+
                   {friends && friends.length > 0 ? (
                     friends
-                      .filter(friend => !selectedGroup?.members?.includes(friend.name))
+                      .filter(
+                        (friend) =>
+                          !selectedGroup?.members?.includes(friend.name)
+                      )
                       .map((friend) => (
                         <Pressable
                           key={friend.name}
@@ -2255,27 +2339,43 @@ export default function GroupsScreen({
                             pressed && { opacity: 0.7 },
                           ]}
                           onPress={() => {
-                            const updatedGroups = groups.map(g => 
-                              g.id === selectedGroup.id 
-                                ? { ...g, members: [...(g.members || []), friend.name] }
+                            const updatedGroups = groups.map((g) =>
+                              g.id === selectedGroup.id
+                                ? {
+                                    ...g,
+                                    members: [
+                                      ...(g.members || []),
+                                      friend.name,
+                                    ],
+                                  }
                                 : g
                             );
                             saveGroups(updatedGroups);
                             setSelectedGroup({
                               ...selectedGroup,
-                              members: [...(selectedGroup.members || []), friend.name]
+                              members: [
+                                ...(selectedGroup.members || []),
+                                friend.name,
+                              ],
                             });
-                            Alert.alert("Success", `${friend.name} added to ${selectedGroup.name}!`);
+                            Alert.alert(
+                              "Success",
+                              `${friend.name} added to ${selectedGroup.name}!`
+                            );
                           }}
                         >
                           <Text style={{ fontSize: 24, marginRight: 12 }}>
                             {friend.emoji || "👤"}
                           </Text>
                           <View style={{ flex: 1 }}>
-                            <Text style={[
-                              { fontSize: 16, fontWeight: "500" },
-                              darkMode ? { color: "#E2E8F0" } : { color: "#374151" }
-                            ]}>
+                            <Text
+                              style={[
+                                { fontSize: 16, fontWeight: "500" },
+                                darkMode
+                                  ? { color: "#E2E8F0" }
+                                  : { color: "#374151" },
+                              ]}
+                            >
                               {friend.name}
                             </Text>
                           </View>
@@ -2287,12 +2387,14 @@ export default function GroupsScreen({
                         </Pressable>
                       ))
                   ) : (
-                    <Text style={[
-                      { textAlign: "center", fontSize: 16, marginTop: 20 },
-                      darkMode ? { color: "#A0AEC0" } : { color: "#6B7280" }
-                    ]}>
-                      {friends?.length === 0 
-                        ? "No friends available to add." 
+                    <Text
+                      style={[
+                        { textAlign: "center", fontSize: 16, marginTop: 20 },
+                        darkMode ? { color: "#A0AEC0" } : { color: "#6B7280" },
+                      ]}
+                    >
+                      {friends?.length === 0
+                        ? "No friends available to add."
                         : "All friends are already members."}
                     </Text>
                   )}
@@ -2310,7 +2412,7 @@ export default function GroupsScreen({
                   <Text style={styles.cancelButtonText}>Done</Text>
                 </TouchableOpacity>
               </View>
-            </View>
+            </KeyboardAvoidingView>
           </View>
         </Modal>
       </SafeAreaView>
@@ -2507,21 +2609,24 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     gap: 6,
     marginTop: 12,
+    marginBottom: 8,
+    paddingHorizontal: 2,
   },
   actionButton: {
     flex: 1,
-    paddingVertical: 8,
-    paddingHorizontal: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
     borderRadius: 14,
     alignItems: "center",
     borderWidth: 1,
+    minHeight: 36,
   },
   actionButtonText: {
     fontSize: 12,
     fontWeight: "500",
   },
-  
-  // Members Button
+
+  // Members Button - Professional Green Theme
   membersButton: {
     backgroundColor: "#F1F8E9",
     borderColor: "#C8E6C9",
@@ -2533,7 +2638,7 @@ const styles = StyleSheet.create({
   membersButtonText: {
     color: "#388E3C",
   },
-  
+
   // Edit Button
   editButton: {
     backgroundColor: "#F8F4E8",
@@ -2549,7 +2654,7 @@ const styles = StyleSheet.create({
   darkEditButtonText: {
     color: "#D69E2E",
   },
-  
+
   // Delete Button
   deleteButton: {
     backgroundColor: "#FFEBEE",
@@ -2661,7 +2766,7 @@ const styles = StyleSheet.create({
     padding: 20,
   },
   modalContent: {
-    backgroundColor: "#fff",
+    backgroundColor: "#FEFEFE",
     borderRadius: 20,
     width: "100%",
     maxHeight: "85%",
@@ -2832,7 +2937,7 @@ const styles = StyleSheet.create({
     borderColor: "#D1D5DB",
   },
   saveButton: {
-    backgroundColor: "#2356A8",
+    backgroundColor: "#8B4513",
   },
   cancelButtonText: {
     color: "#374151",

@@ -24,6 +24,7 @@ export default function App() {
   const [bills, setBills] = useState([]);
   const [profileName, setProfileName] = useState("");
   const [profileEmail, setProfileEmail] = useState("");
+  const [profileEmoji, setProfileEmoji] = useState("👤");
   const [darkMode, setDarkMode] = useState(false);
 
   // Navigation refs for double-tap functionality
@@ -67,9 +68,11 @@ export default function App() {
     const loadData = async () => {
       const savedFriends = await AsyncStorage.getItem("friends");
       const savedDarkMode = await AsyncStorage.getItem("darkMode");
+      const savedProfileEmoji = await AsyncStorage.getItem("profileEmoji");
 
       if (savedFriends) setFriends(JSON.parse(savedFriends));
       if (savedDarkMode !== null) setDarkMode(JSON.parse(savedDarkMode));
+      if (savedProfileEmoji) setProfileEmoji(savedProfileEmoji);
     };
     loadData();
   }, []);
@@ -153,6 +156,8 @@ export default function App() {
               setFriends={setFriends}
               bills={bills}
               profileName={profileName}
+              profileEmoji={profileEmoji}
+              setProfileEmoji={setProfileEmoji}
               darkMode={darkMode}
             />
           )}
@@ -205,9 +210,9 @@ export default function App() {
           name="Profile"
           options={{
             tabBarLabel: "Profile",
-            tabBarIcon: ({ color, focused }) => (
+            tabBarIcon: ({ color }) => (
               <AntDesign
-                name={focused ? "user" : "profile"}
+                name="user"
                 size={24}
                 color={color}
               />

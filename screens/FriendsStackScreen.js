@@ -10,6 +10,8 @@ export default function FriendsStackScreen({
   setFriends,
   bills,
   profileName,
+  profileEmoji,
+  setProfileEmoji,
   darkMode = false, // Add darkMode prop
 }) {
   return (
@@ -22,6 +24,8 @@ export default function FriendsStackScreen({
             setFriends={setFriends}
             bills={bills}
             profileName={profileName}
+            profileEmoji={profileEmoji}
+            setProfileEmoji={setProfileEmoji}
             darkMode={darkMode} // Pass darkMode
           />
         )}
@@ -30,8 +34,10 @@ export default function FriendsStackScreen({
         {(props) => (
           <FriendDetailScreen
             {...props}
+            navigation={props.navigation}
             bills={bills}
             profileName={profileName}
+            profileEmoji={profileEmoji}
             friends={friends} // <-- IMPORTANT: Pass the friends list here
             darkMode={darkMode} // Pass darkMode
           />
