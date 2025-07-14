@@ -1,4 +1,10 @@
-import React, { useState, useMemo, useCallback } from "react";
+import React, {
+  useState,
+  useEffect,
+  useMemo,
+  useCallback,
+  useRef,
+} from "react";
 import {
   View,
   Text,
@@ -17,36 +23,256 @@ import {
   TouchableOpacity,
   Image,
   ActionSheetIOS,
+  StatusBar,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import DropDownPicker from "react-native-dropdown-picker";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import * as ImagePicker from "expo-image-picker";
+import * as Haptics from "expo-haptics";
+import PropTypes from "prop-types";
+import {
+  getCurrencySymbol,
+  validateNoteWordCount,
+  getWordCount,
+} from "../utils/helpers";
 
-// Currency utility function
-const getCurrencySymbol = (currency) => {
-  const symbols = { USD: "$", CAD: "C$", INR: "₹", MXN: "$" };
-  return symbols[currency] || "$";
+// Constants for magic numbers
+const CONSTANTS = {
+  // Input validation
+  MAX_NAME_LENGTH: 50,
+  MAX_NOTE_LENGTH: 500,
+  MAX_AMOUNT_LENGTH: 10,
+  MAX_SEARCH_LENGTH: 100,
+  MAX_CUSTOM_SPLIT_LENGTH: 8,
+  MAX_PERCENTAGE_LENGTH: 3,
+  MIN_NAME_LENGTH: 2,
+  MAX_AMOUNT_VALUE: 999999.99,
+  MIN_AMOUNT_VALUE: 0.01,
+  MAX_PERCENTAGE: 100,
+  PERCENTAGE_TOLERANCE: 105, // 5% tolerance for percentage splits
+
+  // UI dimensions
+  ICON_SIZE_SMALL: 16,
+  ICON_SIZE_MEDIUM: 20,
+  ICON_SIZE_LARGE: 24,
+  ICON_SIZE_XL: 48,
+  ICON_SIZE_XXL: 64,
+
+  // Spacing
+  SPACING_XS: 4,
+  SPACING_SM: 8,
+  SPACING_MD: 12,
+  SPACING_LG: 16,
+  SPACING_XL: 20,
+  SPACING_XXL: 24,
+
+  // Border radius
+  BORDER_RADIUS_SM: 8,
+  BORDER_RADIUS_MD: 12,
+  BORDER_RADIUS_LG: 16,
+  BORDER_RADIUS_XL: 20,
+
+  // Opacity values
+  OPACITY_DISABLED: 0.6,
+  OPACITY_PRESSED: 0.9,
+  OPACITY_LIGHT: 0.7,
+
+  // Animation durations
+  ANIMATION_DURATION_SHORT: 100,
+  ANIMATION_DURATION_MEDIUM: 300,
+  ANIMATION_DURATION_LONG: 600,
+
+  // List rendering
+  MAX_RENDER_BATCH: 10,
+  WINDOW_SIZE: 10,
+  INITIAL_NUM_TO_RENDER: 8,
+
+  // Image quality
+  IMAGE_QUALITY_HIGH: 1,
+  IMAGE_QUALITY_MEDIUM: 0.8,
+  IMAGE_ASPECT_RATIO: [4, 3],
+
+  // Z-index values
+  Z_INDEX_DROPDOWN_HIGH: 4000,
+  Z_INDEX_DROPDOWN_MEDIUM: 3500,
+  Z_INDEX_DROPDOWN_LOW: 3000,
+  Z_INDEX_DROPDOWN_LOWEST: 2000,
 };
 
-// Get friends dropdown options utility
-const getFriendsDropdownOptions = (friends, you) => {
-  if (!friends || !Array.isArray(friends)) return [{ label: you, value: you }];
+// Security utility functions for input sanitization
+const sanitizeTextInput = (input, maxLength = CONSTANTS.MAX_SEARCH_LENGTH) => {
+  if (typeof input !== "string") return "";
+  return input
+    .replace(/[<>"'&]/g, "") // Remove potentially dangerous characters
+    .replace(/[\r\n\t]/g, " ") // Replace newlines and tabs with spaces
+    .replace(/\s+/g, " ") // Replace multiple spaces with single space
+    .trim()
+    .substring(0, maxLength);
+};
 
+const sanitizeNumericInput = (
+  input,
+  maxLength = CONSTANTS.MAX_AMOUNT_LENGTH
+) => {
+  if (typeof input !== "string") return "";
+  return input
+    .replace(/[^0-9.]/g, "") // Only allow numbers and decimal point
+    .substring(0, maxLength);
+};
+
+const validateAmount = (amount) => {
+  const num = parseFloat(amount);
+  return (
+    !isNaN(num) &&
+    num >= CONSTANTS.MIN_AMOUNT_VALUE &&
+    num <= CONSTANTS.MAX_AMOUNT_VALUE &&
+    /^\d+(\.\d{1,2})?$/.test(amount)
+  );
+};
+
+// Validation utility functions for better code organization
+const validateExpenseName = (name) => {
+  return (
+    name &&
+    typeof name === "string" &&
+    name.trim().length >= CONSTANTS.MIN_NAME_LENGTH
+  );
+};
+
+const validatePayer = (payer) => {
+  return payer && typeof payer === "string" && payer.trim().length > 0;
+};
+
+const validateSplitGroup = (splitGroup) => {
+  return (
+    Array.isArray(splitGroup) &&
+    splitGroup.length > 0 &&
+    splitGroup.every((person) => person && typeof person === "string")
+  );
+};
+
+const validatePercentageTotal = (totalPercentage) => {
+  return (
+    totalPercentage >= 0 && totalPercentage <= CONSTANTS.PERCENTAGE_TOLERANCE
+  );
+};
+
+const validateCustomSplitAmount = (amount) => {
+  return amount >= 0 && amount <= CONSTANTS.MAX_AMOUNT_VALUE;
+};
+
+const validateCustomSplitPercentage = (percentage) => {
+  return percentage >= 0 && percentage <= CONSTANTS.MAX_PERCENTAGE;
+};
+
+// Additional data validation and sanitization functions
+const validateBillData = (bill) => {
+  if (!bill || typeof bill !== "object") return false;
+
+  // Required fields validation
+  if (!bill.id || typeof bill.id !== "string") return false;
+  if (
+    !bill.name ||
+    typeof bill.name !== "string" ||
+    bill.name.trim().length === 0
+  )
+    return false;
+  if (!bill.amount || isNaN(parseFloat(bill.amount))) return false;
+  if (!bill.payer || typeof bill.payer !== "string") return false;
+  if (!bill.createdAt || isNaN(new Date(bill.createdAt).getTime()))
+    return false;
+
+  // Optional fields validation
+  if (bill.splitWith && !Array.isArray(bill.splitWith)) return false;
+  if (bill.splitAmounts && typeof bill.splitAmounts !== "object") return false;
+
+  return true;
+};
+
+const sanitizeBillData = (bill) => {
+  if (!validateBillData(bill)) {
+    return null;
+  }
+
+  return {
+    ...bill,
+    id: String(bill.id),
+    name: sanitizeTextInput(bill.name, CONSTANTS.MAX_NAME_LENGTH),
+    amount: sanitizeNumericInput(
+      String(bill.amount),
+      CONSTANTS.MAX_AMOUNT_LENGTH
+    ),
+    payer: sanitizeTextInput(bill.payer, CONSTANTS.MAX_NAME_LENGTH),
+    note: bill.note
+      ? sanitizeTextInput(bill.note, CONSTANTS.MAX_NOTE_LENGTH)
+      : "",
+    currency: bill.currency || "USD",
+    splitType: bill.splitType || "equal",
+    splitWith: Array.isArray(bill.splitWith)
+      ? bill.splitWith.filter((person) => person && typeof person === "string")
+      : [],
+    splitAmounts:
+      bill.splitAmounts && typeof bill.splitAmounts === "object"
+        ? bill.splitAmounts
+        : {},
+    photoUri:
+      bill.photoUri && typeof bill.photoUri === "string" ? bill.photoUri : null,
+    createdAt: bill.createdAt,
+    date: bill.date || bill.createdAt,
+  };
+};
+
+const validateFriendData = (friend) => {
+  return (
+    friend &&
+    typeof friend === "object" &&
+    friend.name &&
+    typeof friend.name === "string" &&
+    friend.name.trim().length > 0
+  );
+};
+
+const sanitizeFriendsArray = (friends) => {
+  if (!Array.isArray(friends)) return [];
+
+  return friends.filter(validateFriendData).map((friend) => ({
+    ...friend,
+    name: sanitizeTextInput(friend.name, CONSTANTS.MAX_NAME_LENGTH),
+    emoji: friend.emoji || "👤",
+  }));
+};
+
+// Enhanced friends dropdown options with emojis for History screen
+const getEnhancedFriendsDropdownOptions = (friends, you, profileEmoji) => {
+  // Validate inputs to prevent invalid dropdown options
+  if (!you || typeof you !== "string") return [];
+  const userEmoji = profileEmoji || "👤";
+  if (!friends || !Array.isArray(friends))
+    return [{ label: `${userEmoji} ${you}`, value: you }];
+
+  // Cache friend options to avoid repeated computations
   const friendOptions = friends.map((friend) => ({
     label: `${friend.emoji || "👤"} ${friend.name}`,
     value: friend.name,
   }));
 
-  return [{ label: `👤 ${you}`, value: you }, ...friendOptions];
+  return [{ label: `${userEmoji} ${you}`, value: you }, ...friendOptions];
 };
 
-// Currency options
-const currencyOptions = [
+// Currency options with flag emojis for History screen
+const localCurrencyOptions = [
   { label: "🇺🇸 USD", value: "USD" },
   { label: "🇨🇦 CAD", value: "CAD" },
   { label: "🇮🇳 INR", value: "INR" },
   { label: "🇲🇽 MXN", value: "MXN" },
+];
+
+// Split type options for History screen
+const splitTypeOptions = [
+  { label: "➗ Equal split", value: "equal" },
+  { label: "💰 Custom split", value: "custom" },
 ];
 
 // Image Viewer Modal Component
@@ -116,7 +342,7 @@ const ImageViewerModal = ({
                   <Ionicons
                     name="camera"
                     size={20}
-                    color="#fff"
+                    color={darkMode ? "#fff" : "#fff"}
                     style={{ marginRight: 8 }}
                   />
                   <Text style={styles.uploadButtonText}>Add Photo</Text>
@@ -170,37 +396,79 @@ const ImageViewerModal = ({
   );
 };
 
-// Optimized Bill Item Component
+// PropTypes for ImageViewerModal component
+ImageViewerModal.propTypes = {
+  visible: PropTypes.bool.isRequired,
+  imageUri: PropTypes.string,
+  onClose: PropTypes.func.isRequired,
+  onUploadImage: PropTypes.func.isRequired,
+  darkMode: PropTypes.bool,
+};
+
+ImageViewerModal.defaultProps = {
+  imageUri: null,
+  darkMode: false,
+};
+
+// Optimized Bill Item Component with memoized functions
 const BillItem = React.memo(
-  ({ item, onEdit, onDelete, onDuplicate, onImagePress, darkMode }) => {
-    const formatDate = (dateString) => {
+  ({
+    item,
+    onEdit,
+    onDelete,
+    onDuplicate,
+    onImagePress,
+    you,
+    darkMode,
+    isDuplicating,
+    isDeleting,
+    // isUploadingImage, // Currently unused
+  }) => {
+    // Memoize expensive formatting functions
+    const formatDate = useMemo(() => {
+      if (!item?.createdAt && !item?.date) return "Invalid Date";
+      const dateString = item.date || item.createdAt;
+      if (!dateString) return "Invalid Date";
       const date = new Date(dateString);
+      // Check if date is valid
+      if (isNaN(date.getTime())) return "Invalid Date";
       return date.toLocaleDateString("en-US", {
         month: "short",
         day: "numeric",
         year: "numeric",
       });
-    };
+    }, [item?.createdAt, item?.date]);
 
-    const formatAmount = (amount, currency) => {
-      const symbol = getCurrencySymbol(currency);
-      const numAmount = parseFloat(amount);
+    const formatAmount = useMemo(() => {
+      if (!item?.amount) return "$0.00";
+      const symbol = getCurrencySymbol(item.currency || "USD");
+      const parsed = parseFloat(item.amount);
+      const numAmount = Number.isNaN(parsed) ? 0 : parsed;
       return `${symbol}${numAmount.toFixed(2)}`;
-    };
+    }, [item?.amount, item?.currency]);
 
-    const getSplitText = () => {
-      if (!item.splitWith || item.splitWith.length === 0) return "No split";
-      if (item.splitWith.length === 1) return `Split with ${item.splitWith[0]}`;
-      if (item.splitWith.length === 2)
-        return `Split with ${item.splitWith.join(" & ")}`;
-      return `Split with ${item.splitWith.length} people`;
-    };
+    const getSplitText = useMemo(() => {
+      if (
+        !item?.splitWith ||
+        !Array.isArray(item.splitWith) ||
+        item.splitWith.length === 0
+      )
+        return "No split";
+      // Filter out null/undefined values and validate
+      const validSplitWith = item.splitWith.filter(
+        (person) => person && typeof person === "string"
+      );
+      if (validSplitWith.length === 0) return "No split";
+      if (validSplitWith.length === 1) return `Split with ${validSplitWith[0]}`;
+      if (validSplitWith.length === 2)
+        return `Split with ${validSplitWith.join(" & ")}`;
+      return `Split with ${validSplitWith.length} people`;
+    }, [item?.splitWith]);
 
-    const getSplitTypeText = () => {
-      if (item.splitType === "exact") return "💰 Exact amounts";
-      if (item.splitType === "percentage") return "📊 By percentage";
+    const getSplitTypeText = useMemo(() => {
+      if (item?.splitType === "custom") return "💰 Custom split";
       return "⚖️ Equal split";
-    };
+    }, [item?.splitType]);
 
     return (
       <View style={[styles.billItem, darkMode && styles.darkBillItem]}>
@@ -213,18 +481,21 @@ const BillItem = React.memo(
               {item.name}
             </Text>
             <Text style={[styles.billAmount, darkMode && styles.darkAmount]}>
-              {formatAmount(item.amount, item.currency)}
+              {formatAmount}
             </Text>
           </View>
           <View style={styles.billDateContainer}>
             <Text style={[styles.billDate, darkMode && styles.darkSubtext]}>
-              {formatDate(item.date || item.createdAt)}
+              {formatDate}
             </Text>
             {item.photoUri && (
               <TouchableOpacity
                 style={styles.photoPreview}
                 onPress={() => onImagePress(item)}
                 activeOpacity={0.7}
+                accessibilityRole="button"
+                accessibilityLabel="View expense photo"
+                accessibilityHint="Tap to view or edit the attached photo"
               >
                 <Image
                   source={{ uri: item.photoUri }}
@@ -276,7 +547,7 @@ const BillItem = React.memo(
             <Text
               style={[styles.billDetailText, darkMode && styles.darkSubtext]}
             >
-              {getSplitText()}
+              {getSplitText}
             </Text>
           </View>
 
@@ -287,7 +558,7 @@ const BillItem = React.memo(
                 darkMode && styles.darkSubtext,
               ]}
             >
-              {getSplitTypeText()}
+              {getSplitTypeText}
             </Text>
           </View>
 
@@ -308,68 +579,127 @@ const BillItem = React.memo(
           )}
         </View>
 
-        <View style={styles.billActions}>
-          <Pressable
-            onPress={() => onDuplicate(item)}
-            style={({ pressed }) => [
-              styles.actionButton,
-              styles.duplicateButton,
-              darkMode && styles.darkDuplicateButton,
-              pressed && styles.actionButtonPressed,
-            ]}
-          >
-            <Text
-              style={[
-                styles.duplicateButtonText,
-                darkMode && styles.darkDuplicateButtonText,
+        {/* Only show action buttons if current user is the payer */}
+        {item.payer === you && (
+          <View style={styles.billActions}>
+            <Pressable
+              onPress={() => onDuplicate(item)}
+              disabled={isDuplicating === item.id}
+              style={({ pressed }) => [
+                styles.actionButton,
+                styles.duplicateButton,
+                darkMode && styles.darkDuplicateButton,
+                pressed && styles.actionButtonPressed,
+                isDuplicating === item.id && {
+                  opacity: CONSTANTS.OPACITY_DISABLED,
+                },
               ]}
             >
-              Duplicate
-            </Text>
-          </Pressable>
+              {isDuplicating === item.id ? (
+                <ActivityIndicator
+                  size="small"
+                  color={darkMode ? "#81C784" : "#388E3C"}
+                />
+              ) : (
+                <Text
+                  style={[
+                    styles.duplicateButtonText,
+                    darkMode && styles.darkDuplicateButtonText,
+                  ]}
+                >
+                  Duplicate
+                </Text>
+              )}
+            </Pressable>
 
-          <Pressable
-            onPress={() => onEdit(item)}
-            style={({ pressed }) => [
-              styles.actionButton,
-              styles.editButton,
-              darkMode && styles.darkEditButton,
-              pressed && styles.actionButtonPressed,
-            ]}
-          >
-            <Text
-              style={[
-                styles.editButtonText,
-                darkMode && styles.darkEditButtonText,
+            <Pressable
+              onPress={() => onEdit(item)}
+              style={({ pressed }) => [
+                styles.actionButton,
+                styles.editButton,
+                darkMode && styles.darkEditButton,
+                pressed && styles.actionButtonPressed,
               ]}
             >
-              Edit
-            </Text>
-          </Pressable>
+              <Text
+                style={[
+                  styles.editButtonText,
+                  darkMode && styles.darkEditButtonText,
+                ]}
+              >
+                Edit
+              </Text>
+            </Pressable>
 
-          <Pressable
-            onPress={() => onDelete(item)}
-            style={({ pressed }) => [
-              styles.actionButton,
-              styles.deleteButton,
-              darkMode && styles.darkDeleteButton,
-              pressed && styles.actionButtonPressed,
-            ]}
-          >
-            <Text
-              style={[
-                styles.deleteButtonText,
-                darkMode && styles.darkDeleteButtonText,
+            <Pressable
+              onPress={() => onDelete(item)}
+              disabled={isDeleting === item.id}
+              style={({ pressed }) => [
+                styles.actionButton,
+                styles.deleteButton,
+                darkMode && styles.darkDeleteButton,
+                pressed && styles.actionButtonPressed,
+                isDeleting === item.id && {
+                  opacity: CONSTANTS.OPACITY_DISABLED,
+                },
               ]}
             >
-              Delete
-            </Text>
-          </Pressable>
-        </View>
+              {isDeleting === item.id ? (
+                <ActivityIndicator
+                  size="small"
+                  color={darkMode ? "#FF8A80" : "#D32F2F"}
+                />
+              ) : (
+                <Text
+                  style={[
+                    styles.deleteButtonText,
+                    darkMode && styles.darkDeleteButtonText,
+                  ]}
+                >
+                  Delete
+                </Text>
+              )}
+            </Pressable>
+          </View>
+        )}
       </View>
     );
   }
 );
+
+// PropTypes for BillItem component
+BillItem.propTypes = {
+  item: PropTypes.shape({
+    id: PropTypes.string.isRequired,
+    name: PropTypes.string.isRequired,
+    amount: PropTypes.oneOfType([PropTypes.string, PropTypes.number])
+      .isRequired,
+    currency: PropTypes.string,
+    createdAt: PropTypes.string,
+    date: PropTypes.string,
+    payer: PropTypes.string,
+    splitWith: PropTypes.arrayOf(PropTypes.string),
+    splitType: PropTypes.string,
+    note: PropTypes.string,
+    photoUri: PropTypes.string,
+  }).isRequired,
+  onEdit: PropTypes.func.isRequired,
+  onDelete: PropTypes.func.isRequired,
+  onDuplicate: PropTypes.func.isRequired,
+  onImagePress: PropTypes.func.isRequired,
+  you: PropTypes.string.isRequired,
+  darkMode: PropTypes.bool,
+  isDuplicating: PropTypes.string,
+  isDeleting: PropTypes.string,
+  // isUploadingImage: PropTypes.string, // Currently unused
+};
+
+BillItem.defaultProps = {
+  darkMode: false,
+  isDuplicating: null,
+  isDeleting: null,
+  // isUploadingImage: null, // Currently unused
+};
 
 // Enhanced Edit Modal Component
 const EditBillModal = ({
@@ -392,9 +722,16 @@ const EditBillModal = ({
   setSplitDropdownOpen,
   currencyDropdownOpen,
   setCurrencyDropdownOpen,
+  splitType,
+  setSplitType,
+  customSplitAmounts,
+  setCustomSplitAmounts,
+  splitTypeDropdownOpen,
+  setSplitTypeDropdownOpen,
   showDatePicker,
   setShowDatePicker,
   fullFriendsList,
+  you,
   onSave,
   onCancel,
   isLoading,
@@ -402,39 +739,157 @@ const EditBillModal = ({
 }) => {
   const [errors, setErrors] = useState({});
 
+  // Track previous split type to manage custom splits properly
+  const prevSplitTypeRef = useRef(splitType);
+
+  // Clear custom splits when split type changes
+  React.useEffect(() => {
+    const prevSplitType = prevSplitTypeRef.current;
+
+    // Only clear if split type actually changed (not on initial load)
+    if (prevSplitType !== splitType) {
+      if (splitType === "equal") {
+        // Clear all custom splits when switching to equal
+        setCustomSplitAmounts({});
+      } else if (splitType === "custom" && prevSplitType === "equal") {
+        // Auto-populate equal amounts when switching to custom
+        if (splitWith.length > 0 && editBillData?.amount) {
+          const equalAmount = (
+            parseFloat(editBillData.amount) / splitWith.length
+          ).toFixed(2);
+          const newCustomAmounts = {};
+          splitWith.forEach((member) => {
+            newCustomAmounts[member] = equalAmount;
+          });
+          setCustomSplitAmounts(newCustomAmounts);
+        }
+      }
+    }
+
+    prevSplitTypeRef.current = splitType;
+  }, [splitType, splitWith, editBillData?.amount]);
+
   const closeAllDropdowns = useCallback(() => {
     setPayerDropdownOpen(false);
     setSplitDropdownOpen(false);
     setCurrencyDropdownOpen(false);
+    setSplitTypeDropdownOpen(false);
   }, []);
 
   const validateForm = () => {
     const newErrors = {};
-    if (!editBillData?.name?.trim())
+    if (!editBillData?.name?.trim()) {
       newErrors.name = "Expense name is required";
+    } else if (editBillData.name.trim().length < 2) {
+      newErrors.name = "Expense name must be at least 2 characters";
+    } else if (editBillData.name.trim().length > 50) {
+      newErrors.name = "Expense name must be less than 50 characters";
+    }
+
     const amount = parseFloat(editBillData?.amount);
-    if (!editBillData?.amount?.trim() || isNaN(amount) || amount <= 0)
-      newErrors.amount = "Valid amount is required";
-    if (!payer) newErrors.payer = "Please select who paid";
-    if (!splitWith || splitWith.length === 0)
+    if (!editBillData?.amount?.trim()) {
+      newErrors.amount = "Amount is required";
+    } else if (isNaN(amount) || amount <= 0) {
+      newErrors.amount = "Amount must be a valid number greater than 0";
+    } else if (amount > 999999) {
+      newErrors.amount = "Amount cannot exceed 999,999";
+    }
+
+    // Date validation - cannot be more than 3 years in the past
+    const threeYearsAgo = new Date();
+    threeYearsAgo.setFullYear(threeYearsAgo.getFullYear() - 3);
+    if (expenseDate < threeYearsAgo) {
+      newErrors.date = "Date cannot be more than 3 years in the past";
+    }
+
+    // Split with validation - user must select at least one other person besides themselves
+    if (splitWith && splitWith.length > 0) {
+      const othersSelected = splitWith.filter((person) => person !== you);
+      if (othersSelected.length === 0) {
+        newErrors.splitWith =
+          "Please select at least one other person to split with";
+      }
+    } else {
       newErrors.splitWith = "Please select at least one person to split with";
+    }
+
+    // Validate custom splits
+    if (splitType === "custom") {
+      const totalCustomAmount = Object.values(customSplitAmounts).reduce(
+        (total, amount) => {
+          return total + (parseFloat(amount) || 0);
+        },
+        0
+      );
+
+      if (Math.abs(totalCustomAmount - amount) > 0.01) {
+        newErrors.customSplitAmounts = `Custom split total (${totalCustomAmount.toFixed(
+          2
+        )}) must equal bill amount (${amount.toFixed(2)})`;
+      }
+
+      // Check if all split members have amounts
+      const missingAmounts = splitWith.filter(
+        (member) =>
+          !customSplitAmounts[member] ||
+          parseFloat(customSplitAmounts[member]) <= 0
+      );
+
+      if (missingAmounts.length > 0) {
+        newErrors.customSplitAmounts = `Please enter valid amounts for all members: ${missingAmounts.join(
+          ", "
+        )}`;
+      }
+    }
+
+    // Note validation
+    if (note && note.trim()) {
+      const noteValidation = validateNoteWordCount(note);
+      if (!noteValidation.isValid) {
+        newErrors.note = noteValidation.error;
+      }
+    }
+
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
 
   const handleSave = () => {
     closeAllDropdowns();
-    if (validateForm()) onSave();
+    if (validateForm()) {
+      onSave();
+    }
   };
 
   const handleDateChange = (event, selectedDate) => {
-    setShowDatePicker(false);
-
-    if (event.type === "dismissed") return;
-
-    if (selectedDate) {
-      setExpenseDate(selectedDate);
+    // For Android, close the picker after selection
+    if (Platform.OS === "android") {
+      setShowDatePicker(false);
+      if (event.type === "set" && selectedDate) {
+        setExpenseDate(selectedDate);
+        // Clear date error if valid date is selected
+        const threeYearsAgo = new Date();
+        threeYearsAgo.setFullYear(threeYearsAgo.getFullYear() - 3);
+        if (errors.date && selectedDate >= threeYearsAgo) {
+          setErrors((prev) => ({ ...prev, date: null }));
+        }
+      }
+    } else {
+      // For iOS, keep the picker open and update the date
+      if (selectedDate) {
+        setExpenseDate(selectedDate);
+        // Clear date error if valid date is selected
+        const threeYearsAgo = new Date();
+        threeYearsAgo.setFullYear(threeYearsAgo.getFullYear() - 3);
+        if (errors.date && selectedDate >= threeYearsAgo) {
+          setErrors((prev) => ({ ...prev, date: null }));
+        }
+      }
     }
+  };
+
+  const handleDateDone = () => {
+    setShowDatePicker(false);
   };
 
   return (
@@ -474,7 +929,11 @@ const EditBillModal = ({
               styles.modalScrollContainer,
               darkMode && styles.darkModalContent,
             ]}
-            contentContainerStyle={{ padding: 6, paddingBottom: 36 }}
+            contentContainerStyle={{
+              padding: 20,
+              paddingTop: 12,
+              paddingBottom: 12,
+            }}
             keyboardShouldPersistTaps="handled"
             nestedScrollEnabled
           >
@@ -489,9 +948,23 @@ const EditBillModal = ({
                 placeholder="Enter expense name"
                 placeholderTextColor={darkMode ? "#A0AEC0" : "#999"}
                 value={editBillData?.name || ""}
+                maxLength={CONSTANTS.MAX_NAME_LENGTH}
+                autoCapitalize="words"
+                autoCorrect={false}
+                spellCheck={false}
                 onChangeText={(txt) => {
-                  setEditBillData((prev) => ({ ...prev, name: txt }));
-                  if (errors.name)
+                  // Security: Sanitize input to prevent XSS and malicious content
+                  const sanitizedTxt = txt
+                    .replace(/[<>"'&]/g, "") // Remove potentially dangerous characters
+                    .replace(/\s+/g, " ") // Replace multiple spaces with single space
+                    .substring(0, CONSTANTS.MAX_NAME_LENGTH); // Enforce max length
+
+                  setEditBillData((prev) => ({ ...prev, name: sanitizedTxt }));
+                  if (
+                    errors.name &&
+                    sanitizedTxt.trim().length >= CONSTANTS.MIN_NAME_LENGTH &&
+                    sanitizedTxt.trim().length <= CONSTANTS.MAX_NAME_LENGTH
+                  )
                     setErrors((prev) => ({ ...prev, name: null }));
                 }}
                 style={[
@@ -527,13 +1000,53 @@ const EditBillModal = ({
                   keyboardType="numeric"
                   value={editBillData?.amount || ""}
                   onChangeText={(txt) => {
-                    setEditBillData((prev) => ({ ...prev, amount: txt }));
-                    if (errors.amount)
+                    // Security: Strict validation and sanitization for amount input
+                    if (typeof txt !== "string") return;
+
+                    // Remove any non-numeric characters except decimal point
+                    const cleanValue = txt.replace(/[^0-9.]/g, "");
+
+                    // Prevent multiple decimal points
+                    const parts = cleanValue.split(".");
+                    const formattedValue =
+                      parts.length > 2
+                        ? parts[0] + "." + parts.slice(1).join("")
+                        : cleanValue;
+
+                    // Limit to reasonable length (max 10 chars including decimal)
+                    const limitedValue = formattedValue.substring(0, 10);
+
+                    // Prevent leading zeros (except for decimal values like 0.50)
+                    const finalValue = limitedValue.replace(/^0+(?=\d)/, "");
+
+                    setEditBillData((prev) => ({
+                      ...prev,
+                      amount: finalValue,
+                    }));
+
+                    // Enhanced validation
+                    const amount = parseFloat(finalValue);
+                    if (
+                      errors.amount &&
+                      finalValue.trim() &&
+                      !isNaN(amount) &&
+                      amount > 0 &&
+                      amount <= 999999.99 && // More specific limit
+                      /^\d+(\.\d{1,2})?$/.test(finalValue) // Regex for proper decimal format
+                    ) {
                       setErrors((prev) => ({ ...prev, amount: null }));
+                    }
                   }}
                   style={[
                     styles.textInput,
-                    { paddingLeft: 35 },
+                    {
+                      paddingLeft:
+                        getCurrencySymbol(currency) === "Mex$"
+                          ? 70
+                          : getCurrencySymbol(currency) === "C$"
+                          ? 45
+                          : 33,
+                    },
                     darkMode && styles.darkTextInput,
                     errors.amount && styles.inputError,
                   ]}
@@ -569,11 +1082,33 @@ const EditBillModal = ({
                 <DateTimePicker
                   value={expenseDate}
                   mode="date"
-                  display="spinner"
+                  display={Platform.OS === "ios" ? "spinner" : "default"}
                   onChange={handleDateChange}
                   maximumDate={new Date()}
                   marginLeft={-36}
+                  themeVariant={darkMode ? "dark" : "light"}
                 />
+              )}
+              {showDatePicker && Platform.OS === "ios" && (
+                <TouchableOpacity
+                  onPress={handleDateDone}
+                  style={[
+                    styles.dateDoneButton,
+                    darkMode && styles.darkDateDoneButton,
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.dateDoneButtonText,
+                      darkMode && styles.darkDateDoneButtonText,
+                    ]}
+                  >
+                    Done
+                  </Text>
+                </TouchableOpacity>
+              )}
+              {errors.date && (
+                <Text style={styles.errorText}>{errors.date}</Text>
               )}
             </View>
 
@@ -588,7 +1123,7 @@ const EditBillModal = ({
                 placeholder="Select currency"
                 open={currencyDropdownOpen}
                 value={currency}
-                items={currencyOptions}
+                items={localCurrencyOptions}
                 setOpen={(open) => {
                   closeAllDropdowns();
                   setCurrencyDropdownOpen(open);
@@ -596,7 +1131,8 @@ const EditBillModal = ({
                 setValue={setCurrency}
                 setItems={() => {}}
                 style={[styles.dropdown, darkMode && styles.darkDropdown]}
-                zIndex={3000}
+                zIndex={CONSTANTS.Z_INDEX_DROPDOWN_HIGH}
+                maxHeight={200}
                 dropDownContainerStyle={[
                   styles.dropdownContainer,
                   darkMode && styles.darkDropdownContainer,
@@ -610,7 +1146,17 @@ const EditBillModal = ({
                   darkMode && styles.darkDropdownPlaceholder,
                 ]}
                 listMode="SCROLLVIEW"
-                scrollViewProps={{ keyboardShouldPersistTaps: "handled" }}
+                scrollViewProps={{
+                  keyboardShouldPersistTaps: "handled",
+                  nestedScrollEnabled: true,
+                  showsVerticalScrollIndicator: true,
+                }}
+                arrowIconStyle={{
+                  tintColor: darkMode ? "#D69E2E" : "#8B4513",
+                }}
+                tickIconStyle={{
+                  tintColor: darkMode ? "#D69E2E" : "#8B4513",
+                }}
               />
             </View>
 
@@ -657,7 +1203,13 @@ const EditBillModal = ({
                 ]}
                 listMode="SCROLLVIEW"
                 scrollViewProps={{ keyboardShouldPersistTaps: "handled" }}
-                zIndex={2000}
+                arrowIconStyle={{
+                  tintColor: darkMode ? "#D69E2E" : "#8B4513",
+                }}
+                tickIconStyle={{
+                  tintColor: darkMode ? "#D69E2E" : "#8B4513",
+                }}
+                zIndex={CONSTANTS.Z_INDEX_DROPDOWN_MEDIUM}
               />
               {errors.payer && (
                 <Text style={styles.errorText}>{errors.payer}</Text>
@@ -682,7 +1234,21 @@ const EditBillModal = ({
                   closeAllDropdowns();
                   setSplitDropdownOpen(open);
                 }}
-                setValue={setSplitWith}
+                setValue={(value) => {
+                  setSplitWith(value);
+                  if (
+                    errors.splitWith &&
+                    value &&
+                    Array.isArray(value) &&
+                    value.length > 0
+                  ) {
+                    const othersSelected = value.filter(
+                      (person) => person !== you
+                    );
+                    if (othersSelected.length > 0)
+                      setErrors((prev) => ({ ...prev, splitWith: null }));
+                  }
+                }}
                 setItems={() => {}}
                 style={[
                   styles.dropdown,
@@ -710,7 +1276,13 @@ const EditBillModal = ({
                 ]}
                 listMode="SCROLLVIEW"
                 scrollViewProps={{ keyboardShouldPersistTaps: "handled" }}
-                zIndex={1000}
+                arrowIconStyle={{
+                  tintColor: darkMode ? "#D69E2E" : "#8B4513",
+                }}
+                tickIconStyle={{
+                  tintColor: darkMode ? "#D69E2E" : "#8B4513",
+                }}
+                zIndex={CONSTANTS.Z_INDEX_DROPDOWN_LOW}
                 badgeColors={[
                   "#F2C4DE",
                   "#C4F2D2",
@@ -735,27 +1307,234 @@ const EditBillModal = ({
               )}
             </View>
 
-            {/* Note */}
-            <View style={styles.inputGroup}>
+            {/* How to Split */}
+            <View style={[styles.inputGroup]}>
               <Text
                 style={[styles.inputLabel, darkMode && styles.darkInputLabel]}
               >
-                Note (optional)
+                How to split?
               </Text>
+              <DropDownPicker
+                placeholder="Select split type"
+                open={splitTypeDropdownOpen}
+                value={splitType}
+                items={splitTypeOptions}
+                setOpen={(open) => {
+                  closeAllDropdowns();
+                  setSplitTypeDropdownOpen(open);
+                }}
+                setValue={setSplitType}
+                setItems={() => {}}
+                style={[styles.dropdown, darkMode && styles.darkDropdown]}
+                maxHeight={200}
+                dropDownContainerStyle={[
+                  styles.dropdownContainer,
+                  darkMode && styles.darkDropdownContainer,
+                ]}
+                textStyle={[
+                  styles.dropdownText,
+                  darkMode && styles.darkDropdownText,
+                ]}
+                placeholderStyle={[
+                  styles.dropdownPlaceholder,
+                  darkMode && styles.darkDropdownPlaceholder,
+                ]}
+                listMode="SCROLLVIEW"
+                scrollViewProps={{
+                  keyboardShouldPersistTaps: "handled",
+                  nestedScrollEnabled: true,
+                  showsVerticalScrollIndicator: true,
+                }}
+                arrowIconStyle={{
+                  tintColor: darkMode ? "#D69E2E" : "#8B4513",
+                }}
+                tickIconStyle={{
+                  tintColor: darkMode ? "#D69E2E" : "#8B4513",
+                }}
+                zIndex={CONSTANTS.Z_INDEX_DROPDOWN_LOWEST}
+              />
+            </View>
+
+            {/* Custom Split Amounts - Only show when split type is custom */}
+            {splitType === "custom" && (
+              <View style={styles.inputGroup}>
+                <Text
+                  style={[styles.inputLabel, darkMode && styles.darkInputLabel]}
+                >
+                  Enter amount for each person ({getCurrencySymbol(currency)})
+                </Text>
+                {Array.from(new Set([payer, ...splitWith]))
+                  .filter(Boolean)
+                  .map((participant) => (
+                    <View key={participant} style={styles.customSplitRow}>
+                      <Text
+                        style={[
+                          styles.participantName,
+                          darkMode && styles.darkParticipantName,
+                        ]}
+                      >
+                        {participant === you
+                          ? `${youWithEmoji} (You)`
+                          : participant}
+                      </Text>
+                      <View style={styles.customSplitInputContainer}>
+                        <Text
+                          style={[
+                            styles.customSplitPrefix,
+                            darkMode && { color: "#D69E2E" },
+                          ]}
+                        >
+                          {getCurrencySymbol(currency)}
+                        </Text>
+                        <TextInput
+                          placeholder="0.00"
+                          placeholderTextColor={darkMode ? "#A0AEC0" : "#999"}
+                          keyboardType="numeric"
+                          value={
+                            customSplitAmounts[participant]?.toString() || ""
+                          }
+                          onChangeText={(value) => {
+                            // Security: Enhanced validation for custom split amounts
+                            if (typeof value !== "string") return;
+
+                            // For custom amounts: allow numbers and one decimal point
+                            let cleanValue = value.replace(/[^0-9.]/g, "");
+                            const parts = cleanValue.split(".");
+                            cleanValue =
+                              parts.length > 2
+                                ? parts[0] + "." + parts.slice(1).join("")
+                                : cleanValue;
+                            // Limit to reasonable amount
+                            cleanValue = cleanValue.substring(
+                              0,
+                              CONSTANTS.MAX_CUSTOM_SPLIT_LENGTH
+                            );
+
+                            setCustomSplitAmounts((prev) => ({
+                              ...prev,
+                              [participant]: cleanValue,
+                            }));
+
+                            // Clear custom splits error when user starts typing
+                            if (errors.customSplitAmounts && cleanValue)
+                              setErrors((prev) => ({
+                                ...prev,
+                                customSplitAmounts: null,
+                              }));
+                          }}
+                          style={[
+                            styles.customSplitInput,
+                            darkMode && styles.darkCustomSplitInput,
+                          ]}
+                        />
+                      </View>
+                    </View>
+                  ))}
+
+                {/* Show total validation */}
+                {splitType === "custom" && (
+                  <View
+                    style={[
+                      styles.totalValidation,
+                      darkMode && styles.darkTotalValidation,
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.totalText,
+                        darkMode && styles.darkTotalText,
+                      ]}
+                    >
+                      Total: {getCurrencySymbol(currency)}
+                      {Object.values(customSplitAmounts)
+                        .reduce((total, amount) => {
+                          return total + (parseFloat(amount) || 0);
+                        }, 0)
+                        .toFixed(2)}{" "}
+                      / {getCurrencySymbol(currency)}
+                      {editBillData?.amount || "0.00"}
+                    </Text>
+                    <Text
+                      style={[
+                        styles.expectedText,
+                        darkMode && styles.darkExpectedText,
+                      ]}
+                    >
+                      Expected: {getCurrencySymbol(currency)}
+                      {parseFloat(editBillData?.amount || 0).toFixed(2)}
+                    </Text>
+                  </View>
+                )}
+
+                {/* Show validation error */}
+                {errors.customSplitAmounts && (
+                  <Text style={styles.errorText}>
+                    {errors.customSplitAmounts}
+                  </Text>
+                )}
+              </View>
+            )}
+
+            {/* Note */}
+            <View style={[styles.inputGroup, { marginBottom: 16 }]}>
+              <View
+                style={{
+                  flexDirection: "row",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  marginBottom: 8,
+                }}
+              >
+                <Text
+                  style={[styles.inputLabel, darkMode && styles.darkInputLabel]}
+                >
+                  Note (optional)
+                </Text>
+                <Text
+                  style={[
+                    { fontSize: 12, color: darkMode ? "#A0AEC0" : "#999" },
+                  ]}
+                >
+                  {getWordCount(note)}/100 words
+                </Text>
+              </View>
               <TextInput
                 placeholder="Add a note..."
                 placeholderTextColor={darkMode ? "#A0AEC0" : "#999"}
                 value={note}
-                onChangeText={setNote}
+                onChangeText={(txt) => {
+                  // Security: Sanitize note input to prevent XSS
+                  const sanitizedNote = txt
+                    .replace(/[<>"'&]/g, "") // Remove potentially dangerous characters
+                    .substring(0, CONSTANTS.MAX_NOTE_LENGTH); // Enforce max length for notes
+
+                  setNote(sanitizedNote);
+
+                  // Clear validation errors if note is valid
+                  if (
+                    errors.note &&
+                    sanitizedNote.trim().length <= CONSTANTS.MAX_NOTE_LENGTH
+                  ) {
+                    setErrors((prev) => ({ ...prev, note: null }));
+                  }
+                }}
                 style={[
                   styles.textInput,
                   styles.noteInput,
                   darkMode && styles.darkTextInput,
+                  errors.note && styles.inputError,
                 ]}
                 multiline
                 numberOfLines={3}
                 textAlignVertical="top"
+                maxLength={500}
+                autoCapitalize="sentences"
+                autoCorrect={false}
+                spellCheck={false}
               />
+              {errors.note && (
+                <Text style={styles.errorText}>{errors.note}</Text>
+              )}
             </View>
           </ScrollView>
 
@@ -783,13 +1562,27 @@ const EditBillModal = ({
             </TouchableOpacity>
             <TouchableOpacity
               onPress={handleSave}
-              style={[styles.modalButton, styles.saveButton]}
+              style={[
+                styles.modalButton,
+                styles.saveButton,
+                darkMode && styles.darkSaveButton,
+              ]}
               disabled={isLoading}
             >
               {isLoading ? (
-                <ActivityIndicator color="#fff" size="small" />
+                <ActivityIndicator
+                  color={darkMode ? "#fff" : "#fff"}
+                  size="small"
+                />
               ) : (
-                <Text style={styles.saveButtonText}>Save Changes</Text>
+                <Text
+                  style={[
+                    styles.saveButtonText,
+                    darkMode && styles.darkSaveButtonText,
+                  ]}
+                >
+                  Save Changes
+                </Text>
               )}
             </TouchableOpacity>
           </View>
@@ -799,6 +1592,73 @@ const EditBillModal = ({
   );
 };
 
+// PropTypes for EditBillModal component
+EditBillModal.propTypes = {
+  visible: PropTypes.bool.isRequired,
+  editBillData: PropTypes.object,
+  setEditBillData: PropTypes.func.isRequired,
+  payer: PropTypes.string,
+  setPayer: PropTypes.func.isRequired,
+  splitWith: PropTypes.arrayOf(PropTypes.string).isRequired,
+  setSplitWith: PropTypes.func.isRequired,
+  note: PropTypes.string.isRequired,
+  setNote: PropTypes.func.isRequired,
+  currency: PropTypes.string.isRequired,
+  setCurrency: PropTypes.func.isRequired,
+  splitType: PropTypes.string.isRequired,
+  setSplitType: PropTypes.func.isRequired,
+  customSplitAmounts: PropTypes.object.isRequired,
+  setCustomSplitAmounts: PropTypes.func.isRequired,
+  expenseDate: PropTypes.instanceOf(Date).isRequired,
+  setExpenseDate: PropTypes.func.isRequired,
+  fullFriendsList: PropTypes.arrayOf(PropTypes.object).isRequired,
+  errors: PropTypes.object.isRequired,
+  setErrors: PropTypes.func.isRequired,
+  payerDropdownOpen: PropTypes.bool.isRequired,
+  setPayerDropdownOpen: PropTypes.func.isRequired,
+  splitDropdownOpen: PropTypes.bool.isRequired,
+  setSplitDropdownOpen: PropTypes.func.isRequired,
+  currencyDropdownOpen: PropTypes.bool.isRequired,
+  setCurrencyDropdownOpen: PropTypes.func.isRequired,
+  splitTypeDropdownOpen: PropTypes.bool.isRequired,
+  setSplitTypeDropdownOpen: PropTypes.func.isRequired,
+  showDatePicker: PropTypes.bool.isRequired,
+  setShowDatePicker: PropTypes.func.isRequired,
+  onSave: PropTypes.func.isRequired,
+  onClose: PropTypes.func.isRequired,
+  isLoading: PropTypes.bool.isRequired,
+  darkMode: PropTypes.bool,
+  you: PropTypes.string.isRequired,
+};
+
+EditBillModal.defaultProps = {
+  editBillData: null,
+  payer: null,
+  darkMode: false,
+};
+
+/**
+ * HistoryScreen Component
+ *
+ * Manages expense history with comprehensive CRUD operations.
+ * Features:
+ * - Expense filtering and sorting
+ * - Real-time search functionality
+ * - Image management for receipts
+ * - Advanced split calculations (equal, exact, percentage)
+ * - Comprehensive form validation
+ * - Loading states and error handling
+ * - Dark mode support
+ * - Accessibility features
+ *
+ * @param {Array} bills - Array of expense/bill objects
+ * @param {Function} deleteBill - Function to delete a bill
+ * @param {Function} editBill - Function to edit a bill
+ * @param {Function} addBill - Function to add a new bill
+ * @param {Array} friends - Array of friend objects
+ * @param {string} profileName - Current user's profile name
+ * @param {boolean} darkMode - Dark mode toggle state
+ */
 export default function HistoryScreen({
   bills,
   deleteBill,
@@ -806,11 +1666,24 @@ export default function HistoryScreen({
   addBill,
   friends,
   profileName,
+  profileEmoji,
   darkMode = false,
+  // currentUser removed - not currently used
 }) {
+  // =====================================
+  // HOOKS AND STATE MANAGEMENT
+  // =====================================
+  const insets = useSafeAreaInsets();
+  const navigationSpacing = Math.max(insets.bottom, 20) + 10 + 60;
+
+  // Modal states
   const [editModalVisible, setEditModalVisible] = useState(false);
   const [editBillData, setEditBillData] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [isDuplicating, setIsDuplicating] = useState(null); // Track which bill is being duplicated
+  const [isDeleting, setIsDeleting] = useState(null); // Track which bill is being deleted
+  const [isUploadingImage, setIsUploadingImage] = useState(null); // Track image upload state
+  const [appLoading, setAppLoading] = useState(true); // Track app initialization
   const [searchQuery, setSearchQuery] = useState("");
   const [sortBy, setSortBy] = useState("date");
   const [activeFilter, setActiveFilter] = useState("all");
@@ -823,27 +1696,89 @@ export default function HistoryScreen({
   const [billDetailsVisible, setBillDetailsVisible] = useState(false);
   const [selectedBillDetails, setSelectedBillDetails] = useState(null);
 
+  // =====================================
+  // EFFECTS AND INITIALIZATION
+  // =====================================
+
+  // Initialize app loading state
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setAppLoading(false);
+    }, CONSTANTS.ANIMATION_DURATION_SHORT); // Brief loading state for smooth initialization
+    return () => clearTimeout(timer);
+  }, []);
+
+  // Development warning for data integrity
+  useEffect(() => {
+    if (process.env.NODE_ENV === "development") {
+      const invalidBills = bills.filter((bill) => !validateBillData(bill));
+      const invalidFriends = friends.filter(
+        (friend) => !validateFriendData(friend)
+      );
+    }
+  }, [bills, friends]);
+
   // Form states for edit modal
   const [payer, setPayer] = useState(null);
   const [splitWith, setSplitWith] = useState([]);
+  const [splitType, setSplitType] = useState("equal");
+  const [customSplitAmounts, setCustomSplitAmounts] = useState({});
   const [note, setNote] = useState("");
   const [currency, setCurrency] = useState("USD");
   const [expenseDate, setExpenseDate] = useState(new Date());
   const [payerDropdownOpen, setPayerDropdownOpen] = useState(false);
   const [splitDropdownOpen, setSplitDropdownOpen] = useState(false);
   const [currencyDropdownOpen, setCurrencyDropdownOpen] = useState(false);
+  const [splitTypeDropdownOpen, setSplitTypeDropdownOpen] = useState(false);
   const [showDatePicker, setShowDatePicker] = useState(false);
 
-  const you = profileName && profileName.trim() ? profileName.trim() : "You";
+  // =====================================
+  // DATA VALIDATION AND SANITIZATION
+  // =====================================
+
+  // Validate and sanitize incoming props
+  const validatedBills = useMemo(() => {
+    if (!Array.isArray(bills)) {
+      return [];
+    }
+    return bills.map(sanitizeBillData).filter(Boolean);
+  }, [bills]);
+
+  const validatedFriends = useMemo(() => {
+    return sanitizeFriendsArray(friends);
+  }, [friends]);
+
+  const you =
+    profileName && profileName.trim()
+      ? sanitizeTextInput(profileName.trim(), CONSTANTS.MAX_NAME_LENGTH)
+      : "You";
+
+  const youWithEmoji = `${profileEmoji || "👤"} ${you}`;
+
+  // Note: In multi-user environment, bills should use user IDs instead of display names
+  // for proper data isolation and user identification
   const fullFriendsList = useMemo(
-    () => getFriendsDropdownOptions(friends, you),
-    [friends, you]
+    () =>
+      getEnhancedFriendsDropdownOptions(validatedFriends, you, profileEmoji),
+    [validatedFriends, you, profileEmoji]
   );
 
-  // Enhanced filtering with date ranges and search
+  // =====================================
+  // COMPUTED VALUES AND MEMOIZATION
+  // =====================================
+
+  // Enhanced filtering with date ranges and search - optimized with proper validation
   const filteredAndSortedBills = useMemo(() => {
-    let filtered = bills.filter((bill) => {
+    if (!validatedBills || validatedBills.length === 0) return [];
+
+    let filtered = validatedBills.filter((bill) => {
+      // Validate bill structure to prevent errors
+      if (!bill || !bill.createdAt || !bill.name) return false;
+
       const billDate = new Date(bill.createdAt);
+      // Check for invalid date
+      if (isNaN(billDate.getTime())) return false;
+
       const now = new Date();
 
       // Date filter
@@ -862,19 +1797,32 @@ export default function HistoryScreen({
           break;
       }
 
-      // Text search
-      if (searchQuery) {
-        const query = searchQuery.toLowerCase();
-        return (
-          bill.name.toLowerCase().includes(query) ||
-          bill.payer.toLowerCase().includes(query) ||
-          (bill.note && bill.note.toLowerCase().includes(query)) ||
-          bill.amount.toString().includes(query) ||
-          (bill.splitWith &&
-            bill.splitWith.some((person) =>
-              person.toLowerCase().includes(query)
-            ))
-        );
+      // Text search - optimized with early returns
+      if (searchQuery && searchQuery.trim()) {
+        const query = searchQuery.toLowerCase().trim();
+        const billName = bill.name?.toLowerCase() || "";
+        const billPayer = bill.payer?.toLowerCase() || "";
+        const billNote = bill.note?.toLowerCase() || "";
+        const billAmount = bill.amount?.toString() || "";
+
+        // Early return for performance
+        if (
+          billName.includes(query) ||
+          billPayer.includes(query) ||
+          billNote.includes(query) ||
+          billAmount.includes(query)
+        ) {
+          return true;
+        }
+
+        // Check splitWith array
+        if (bill.splitWith && Array.isArray(bill.splitWith)) {
+          return bill.splitWith.some(
+            (person) => person && person.toLowerCase().includes(query)
+          );
+        }
+
+        return false;
       }
 
       return true;
@@ -883,15 +1831,28 @@ export default function HistoryScreen({
     return filtered.sort((a, b) => {
       switch (sortBy) {
         case "amount":
-          return parseFloat(b.amount) - parseFloat(a.amount);
+          const amountA = parseFloat(a.amount) || 0;
+          const amountB = parseFloat(b.amount) || 0;
+          return amountB - amountA;
         case "name":
-          return a.name.localeCompare(b.name);
+          const nameA = a.name || "";
+          const nameB = b.name || "";
+          return nameA.localeCompare(nameB);
         case "date":
         default:
-          return new Date(b.createdAt) - new Date(a.createdAt);
+          const dateA = new Date(a.createdAt);
+          const dateB = new Date(b.createdAt);
+          // Handle invalid dates
+          if (isNaN(dateA.getTime())) return 1;
+          if (isNaN(dateB.getTime())) return -1;
+          return dateB - dateA;
       }
     });
-  }, [bills, searchQuery, sortBy, activeFilter]);
+  }, [validatedBills, searchQuery, sortBy, activeFilter]);
+
+  // =====================================
+  // EVENT HANDLERS AND CALLBACKS
+  // =====================================
 
   const handleRemovePhoto = useCallback(
     async (billItem) => {
@@ -967,7 +1928,7 @@ export default function HistoryScreen({
         handleImagePicker(item);
       }
     },
-    [handleRemovePhoto]
+    [handleRemovePhoto, handleImagePicker]
   );
 
   const handleImagePicker = useCallback(
@@ -995,7 +1956,7 @@ export default function HistoryScreen({
         ]);
       }
     },
-    [closeAllDropdowns]
+    [closeAllDropdowns, launchCamera, pickImage]
   );
 
   const handleUploadImage = useCallback(() => {
@@ -1009,6 +1970,7 @@ export default function HistoryScreen({
     setPayerDropdownOpen(false);
     setSplitDropdownOpen(false);
     setCurrencyDropdownOpen(false);
+    setSplitTypeDropdownOpen(false);
   }, []);
 
   // Camera functions - exact copy from BillsScreen
@@ -1020,11 +1982,12 @@ export default function HistoryScreen({
           return;
         }
 
+        setIsUploadingImage(billItem.id);
         const result = await ImagePicker.launchImageLibraryAsync({
-          mediaTypes: ImagePicker.MediaTypeOptions.Images,
+          mediaTypes: ["images"],
           allowsEditing: true,
-          aspect: [4, 3],
-          quality: 1,
+          aspect: CONSTANTS.IMAGE_ASPECT_RATIO,
+          quality: CONSTANTS.IMAGE_QUALITY_HIGH,
         });
 
         if (!result.canceled && result.assets?.length > 0) {
@@ -1032,14 +1995,16 @@ export default function HistoryScreen({
             ...billItem,
             photoUri: result.assets[0].uri,
           };
-          editBill(updatedBill);
+          await editBill(updatedBill);
           Alert.alert("Success!", "Photo updated successfully!");
         }
       } catch (error) {
         Alert.alert("Error", "Failed to select image");
+      } finally {
+        setIsUploadingImage(null);
       }
     },
-    [editBill]
+    [editBill, setIsUploadingImage]
   );
 
   const launchCamera = useCallback(
@@ -1050,6 +2015,7 @@ export default function HistoryScreen({
           return;
         }
 
+        setIsUploadingImage(billItem.id);
         const { status: cameraStatus } =
           await ImagePicker.requestCameraPermissionsAsync();
         const { status: mediaStatus } =
@@ -1064,10 +2030,10 @@ export default function HistoryScreen({
         }
 
         const result = await ImagePicker.launchCameraAsync({
-          mediaTypes: ImagePicker.MediaTypeOptions.Images,
+          mediaTypes: ["images"],
           allowsEditing: true,
-          aspect: [4, 3],
-          quality: 0.8,
+          aspect: CONSTANTS.IMAGE_ASPECT_RATIO,
+          quality: CONSTANTS.IMAGE_QUALITY_MEDIUM,
         });
 
         if (!result.canceled && result.assets?.length > 0) {
@@ -1075,14 +2041,16 @@ export default function HistoryScreen({
             ...billItem,
             photoUri: result.assets[0].uri,
           };
-          editBill(updatedBill);
+          await editBill(updatedBill);
           Alert.alert("Success!", "Photo updated successfully!");
         }
       } catch (error) {
         Alert.alert("Error", "Unable to launch camera.");
+      } finally {
+        setIsUploadingImage(null);
       }
     },
-    [editBill]
+    [editBill, setIsUploadingImage]
   );
 
   // Bill details functionality
@@ -1095,25 +2063,13 @@ export default function HistoryScreen({
 
     let splitDetails = [];
 
-    if (splitType === "exact" && splitAmounts) {
-      // Exact amounts split
+    if (splitType === "custom" && splitAmounts) {
+      // Custom amounts split
       splitDetails = splitGroup.map((person) => ({
         person,
         owes: splitAmounts[person] || 0,
         isPayer: person === payer,
       }));
-    } else if (splitType === "percentage" && splitAmounts) {
-      // Percentage split
-      splitDetails = splitGroup.map((person) => {
-        const percentage = splitAmounts[person] || 0;
-        const owesAmount = (amount * percentage) / 100;
-        return {
-          person,
-          owes: owesAmount,
-          percentage: percentage,
-          isPayer: person === payer,
-        };
-      });
     } else {
       // Equal split (default)
       const perPersonAmount =
@@ -1145,8 +2101,14 @@ export default function HistoryScreen({
 
   const openEditModal = useCallback((bill) => {
     setEditBillData(bill);
-    setPayer(bill.payer || null);
+
+    // Ensure payer value matches dropdown options
+    const payerValue = bill.payer || null;
+    setPayer(payerValue);
+
     setSplitWith(bill.splitWith ? [...bill.splitWith] : []);
+    setSplitType(bill.splitType || "equal");
+    setCustomSplitAmounts(bill.splitAmounts || {});
     setNote(bill.note || "");
     setCurrency(bill.currency || "USD");
     setExpenseDate(bill.date ? new Date(bill.date) : new Date());
@@ -1156,23 +2118,108 @@ export default function HistoryScreen({
   const handleEditSave = useCallback(async () => {
     setIsLoading(true);
     try {
+      // Security: Validate all inputs before saving
+      const sanitizedName = sanitizeTextInput(
+        editBillData?.name || "",
+        CONSTANTS.MAX_NAME_LENGTH
+      );
+      const sanitizedNote = sanitizeTextInput(
+        note || "",
+        CONSTANTS.MAX_NOTE_LENGTH
+      );
+      const sanitizedAmount = sanitizeNumericInput(
+        editBillData?.amount || "",
+        CONSTANTS.MAX_AMOUNT_LENGTH
+      );
+
+      // Validate required fields using utility functions
+      if (!validateExpenseName(sanitizedName)) {
+        throw new Error(
+          `Expense name must be at least ${CONSTANTS.MIN_NAME_LENGTH} characters long`
+        );
+      }
+
+      if (!validateAmount(sanitizedAmount)) {
+        throw new Error(
+          `Please enter a valid amount between ${CONSTANTS.MIN_AMOUNT_VALUE} and ${CONSTANTS.MAX_AMOUNT_VALUE}`
+        );
+      }
+
+      if (!validatePayer(payer)) {
+        throw new Error("Please select a valid payer");
+      }
+
       let splitGroup = splitWith.includes(payer)
         ? splitWith
         : [payer, ...splitWith];
 
-      await editBill({
+      // Validate split group
+      splitGroup = splitGroup.filter(
+        (person) => person && typeof person === "string"
+      );
+      if (!validateSplitGroup(splitGroup)) {
+        throw new Error("At least one person must be selected for the split");
+      }
+
+      // Calculate split amounts based on split type with validation
+      let splitAmounts = {};
+      if (splitType === "equal") {
+        // For equal split, don't store splitAmounts
+        splitAmounts = {};
+      } else if (splitType === "custom") {
+        let total = 0;
+        splitGroup.forEach((p) => {
+          const amount = parseFloat(customSplitAmounts[p] || 0);
+          if (!validateCustomSplitAmount(amount)) {
+            throw new Error(
+              `Invalid amount for ${p}. Must be between 0 and ${CONSTANTS.MAX_AMOUNT_VALUE}`
+            );
+          }
+          splitAmounts[p] = amount;
+          total += amount;
+        });
+
+        // Validate total matches bill amount
+        if (Math.abs(total - parseFloat(sanitizedAmount)) > 0.01) {
+          throw new Error(
+            `Custom split total (${total.toFixed(
+              2
+            )}) must equal bill amount (${parseFloat(sanitizedAmount).toFixed(
+              2
+            )})`
+          );
+        }
+      }
+
+      const updatedBill = {
         ...editBillData,
+        name: sanitizedName,
+        amount: parseFloat(sanitizedAmount).toFixed(2),
         payer: payer,
         splitWith: splitGroup,
-        note: note,
+        splitType: splitType,
+        splitAmounts: splitAmounts,
+        note: sanitizedNote,
         currency: currency,
         date: expenseDate.toISOString(),
-      });
+      };
+
+      // Final validation of the complete bill object
+      const sanitizedBill = sanitizeBillData(updatedBill);
+      if (!sanitizedBill) {
+        throw new Error(
+          "Invalid bill data. Please check all fields and try again."
+        );
+      }
+
+      await editBill(sanitizedBill);
 
       setEditModalVisible(false);
       setEditBillData(null);
       setPayer(null);
       setSplitWith([]);
+      setSplitType("equal");
+      setCustomSplitAmounts({});
       setNote("");
       setCurrency("USD");
       setExpenseDate(new Date());
@@ -1183,7 +2230,17 @@ export default function HistoryScreen({
     } finally {
       setIsLoading(false);
     }
-  }, [editBillData, payer, splitWith, note, currency, expenseDate, editBill]);
+  }, [
+    editBillData,
+    payer,
+    splitWith,
+    splitType,
+    customSplitAmounts,
+    note,
+    currency,
+    expenseDate,
+    editBill,
+  ]);
 
   const handleDelete = useCallback(
     (bill) => {
@@ -1195,15 +2252,25 @@ export default function HistoryScreen({
           {
             text: "Delete",
             style: "destructive",
-            onPress: () => {
-              deleteBill(bill.id);
-              Alert.alert("Deleted! 🗑️", "Expense deleted successfully!");
+            onPress: async () => {
+              try {
+                setIsDeleting(bill.id);
+                await deleteBill(bill.id);
+                Alert.alert("Deleted! 🗑️", "Expense deleted successfully!");
+              } catch (error) {
+                Alert.alert(
+                  "Error",
+                  "Failed to delete expense. Please try again."
+                );
+              } finally {
+                setIsDeleting(null);
+              }
             },
           },
         ]
       );
     },
-    [deleteBill]
+    [deleteBill, setIsDeleting]
   );
 
   const handleDuplicate = useCallback(
@@ -1223,9 +2290,24 @@ export default function HistoryScreen({
           text: "Duplicate",
           onPress: async () => {
             try {
+              // Add haptic feedback for better UX
+              await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+              setIsDuplicating(bill.id);
+
+              // Validate bill data before duplication
+              if (!bill.name || !bill.amount || !bill.payer) {
+                Alert.alert("Error", "Cannot duplicate incomplete bill data");
+                return;
+              }
+
+              // Simulate network delay for better UX
+              await new Promise((resolve) =>
+                setTimeout(resolve, CONSTANTS.ANIMATION_DURATION_LONG)
+              );
+
               const duplicatedBill = {
                 ...bill,
-                id: Date.now().toString(),
+                id: `${Date.now()}-${Math.random().toString(36).substring(2)}`,
                 name: `${bill.name} (Copy)`,
                 createdAt: new Date().toISOString(),
                 date: new Date().toISOString(),
@@ -1240,27 +2322,38 @@ export default function HistoryScreen({
                 photoUri: bill.photoUri || null,
               };
 
-              await addBill(duplicatedBill);
+              // Validate the duplicated bill data
+              const sanitizedDuplicatedBill = sanitizeBillData(duplicatedBill);
+              if (!sanitizedDuplicatedBill) {
+                throw new Error(
+                  "Unable to duplicate expense. Invalid data detected."
+                );
+              }
+
+              await addBill(sanitizedDuplicatedBill);
               Alert.alert("Success! 📋", "Expense duplicated successfully!");
             } catch (error) {
-              console.error("Duplicate error:", error);
               Alert.alert(
-                "Error",
-                "Failed to duplicate expense. Please try again."
+                "Duplication Failed",
+                "Unable to create a copy of this expense. Please try again."
               );
+            } finally {
+              setIsDuplicating(null);
             }
           },
         },
       ]);
     },
-    [addBill, you]
+    [addBill, you, setIsDuplicating]
   );
 
   const renderBillItem = useCallback(
     ({ item }) => (
       <Pressable
         onPress={() => handleBillPress(item)}
-        style={({ pressed }) => [{ opacity: pressed ? 0.9 : 1 }]}
+        style={({ pressed }) => [
+          { opacity: pressed ? CONSTANTS.OPACITY_PRESSED : 1 },
+        ]}
       >
         <BillItem
           item={item}
@@ -1268,7 +2361,11 @@ export default function HistoryScreen({
           onDelete={handleDelete}
           onDuplicate={handleDuplicate}
           onImagePress={handleImagePress}
+          you={you}
           darkMode={darkMode}
+          isDuplicating={isDuplicating}
+          isDeleting={isDeleting}
+          // isUploadingImage={isUploadingImage} // Currently unused
         />
       </Pressable>
     ),
@@ -1279,6 +2376,7 @@ export default function HistoryScreen({
       handleDuplicate,
       handleImagePress,
       darkMode,
+      isDuplicating,
     ]
   );
 
@@ -1320,17 +2418,81 @@ export default function HistoryScreen({
     </View>
   );
 
-  const getItemLayout = useCallback(
-    (_, index) => ({
-      length: 180, // Approximate height of each item
-      offset: 180 * index,
-      index,
-    }),
-    []
-  );
+  // Removed getItemLayout for better performance with dynamic heights
+
+  // Data integrity check - prevent rendering with invalid data
+  if (!Array.isArray(bills)) {
+    return (
+      <SafeAreaView
+        style={[styles.container, darkMode && styles.darkContainer]}
+      >
+        <StatusBar
+          barStyle={darkMode ? "light-content" : "dark-content"}
+          backgroundColor={darkMode ? "#1A202C" : "#EFE4D2"}
+        />
+        <View style={styles.loadingOverlay}>
+          <Text
+            style={[styles.loadingText, darkMode && styles.darkLoadingText]}
+          >
+            Error: Invalid data format. Please refresh the app.
+          </Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (!Array.isArray(friends)) {
+    return (
+      <SafeAreaView
+        style={[styles.container, darkMode && styles.darkContainer]}
+      >
+        <StatusBar
+          barStyle={darkMode ? "light-content" : "dark-content"}
+          backgroundColor={darkMode ? "#1A202C" : "#EFE4D2"}
+        />
+        <View style={styles.loadingOverlay}>
+          <Text
+            style={[styles.loadingText, darkMode && styles.darkLoadingText]}
+          >
+            Error: Invalid friends data. Please refresh the app.
+          </Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  // Show loading overlay during app initialization
+  if (appLoading) {
+    return (
+      <SafeAreaView
+        style={[styles.container, darkMode && styles.darkContainer]}
+      >
+        <StatusBar
+          barStyle={darkMode ? "light-content" : "dark-content"}
+          backgroundColor={darkMode ? "#1A202C" : "#EFE4D2"}
+        />
+        <View style={styles.loadingOverlay}>
+          <ActivityIndicator
+            size="large"
+            color={darkMode ? "#FF9500" : "#007AFF"}
+          />
+          <Text
+            style={[styles.loadingText, darkMode && styles.darkLoadingText]}
+          >
+            Loading your expense history...
+          </Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={[styles.container, darkMode && styles.darkContainer]}>
+      <StatusBar
+        barStyle={darkMode ? "light-content" : "dark-content"}
+        backgroundColor={darkMode ? "#1A202C" : "#EFE4D2"}
+      />
+
       <View style={styles.header}>
         <Text style={[styles.title, darkMode && styles.darkTitleText]}>
           History Screen
@@ -1358,8 +2520,18 @@ export default function HistoryScreen({
             placeholder="Search expenses..."
             placeholderTextColor={darkMode ? "#A0AEC0" : "#9CA3AF"}
             value={searchQuery}
-            onChangeText={setSearchQuery}
+            onChangeText={(txt) => {
+              // Security: Sanitize search input to prevent injection attacks
+              const sanitizedSearch = txt
+                .replace(/[<>"'&]/g, "") // Remove potentially dangerous characters
+                .replace(/[\r\n\t]/g, " ") // Replace newlines and tabs with spaces
+                .substring(0, CONSTANTS.MAX_SEARCH_LENGTH); // Limit search query length
+
+              setSearchQuery(sanitizedSearch);
+            }}
             style={[styles.searchInput, darkMode && styles.darkSearchInput]}
+            accessibilityLabel="Search expenses"
+            accessibilityHint="Type to search through your expense history"
           />
           {searchQuery.length > 0 && (
             <TouchableOpacity
@@ -1391,13 +2563,22 @@ export default function HistoryScreen({
                     darkMode &&
                     styles.darkActiveFilterButton,
                 ]}
+                accessibilityRole="button"
+                accessibilityLabel={`Filter by ${
+                  filter === "all"
+                    ? "all expenses"
+                    : filter === "thisMonth"
+                    ? "this month"
+                    : "this week"
+                }`}
+                accessibilityState={{ selected: activeFilter === filter }}
               >
                 <Text
                   style={[
                     styles.filterButtonText,
                     activeFilter === filter && styles.activeFilterButtonText,
                     darkMode &&
-                      !!(activeFilter !== filter) &&
+                      activeFilter !== filter &&
                       styles.darkFilterButtonText,
                     activeFilter === filter &&
                       darkMode &&
@@ -1429,7 +2610,7 @@ export default function HistoryScreen({
             <Ionicons
               name="swap-vertical"
               size={16}
-              color="#fff" // Always white to match the brown/gold button background
+              color={darkMode ? "#fff" : "#fff"} // White for both themes
             />
             <Text
               style={[
@@ -1449,19 +2630,20 @@ export default function HistoryScreen({
 
       <FlatList
         data={filteredAndSortedBills}
-        keyExtractor={(item) => `${item.id}-${item.photoUri || "no-photo"}`}
+        keyExtractor={(item) => item.id}
         renderItem={renderBillItem}
         contentContainerStyle={[
           styles.listContainer,
+          { paddingBottom: navigationSpacing },
           filteredAndSortedBills.length === 0 && styles.emptyListContainer,
         ]}
         showsVerticalScrollIndicator={false}
         ListEmptyComponent={EmptyComponent}
         removeClippedSubviews={true}
-        maxToRenderPerBatch={10}
-        windowSize={10}
-        initialNumToRender={8}
-        getItemLayout={getItemLayout}
+        maxToRenderPerBatch={CONSTANTS.MAX_RENDER_BATCH}
+        windowSize={CONSTANTS.WINDOW_SIZE}
+        initialNumToRender={CONSTANTS.INITIAL_NUM_TO_RENDER}
+        // getItemLayout removed for dynamic height support
         keyboardShouldPersistTaps="handled"
         ItemSeparatorComponent={() => <View style={styles.itemSeparator} />}
       />
@@ -1740,10 +2922,8 @@ export default function HistoryScreen({
                           darkMode && styles.darkSplitTypeText,
                         ]}
                       >
-                        {selectedBillDetails.splitType === "exact"
-                          ? "💰 Exact amounts"
-                          : selectedBillDetails.splitType === "percentage"
-                          ? "📊 By percentage"
+                        {selectedBillDetails.splitType === "custom"
+                          ? "💰 Custom split"
                           : "⚖️ Equal split"}
                       </Text>
                     </View>
@@ -1775,9 +2955,16 @@ export default function HistoryScreen({
         setSplitDropdownOpen={setSplitDropdownOpen}
         currencyDropdownOpen={currencyDropdownOpen}
         setCurrencyDropdownOpen={setCurrencyDropdownOpen}
+        splitType={splitType}
+        setSplitType={setSplitType}
+        customSplitAmounts={customSplitAmounts}
+        setCustomSplitAmounts={setCustomSplitAmounts}
+        splitTypeDropdownOpen={splitTypeDropdownOpen}
+        setSplitTypeDropdownOpen={setSplitTypeDropdownOpen}
         showDatePicker={showDatePicker}
         setShowDatePicker={setShowDatePicker}
         fullFriendsList={fullFriendsList}
+        you={you}
         onSave={handleEditSave}
         onCancel={() => setEditModalVisible(false)}
         isLoading={isLoading}
@@ -1794,6 +2981,23 @@ const styles = StyleSheet.create({
   },
   darkContainer: {
     backgroundColor: "#1A1A1A",
+  },
+
+  // Loading overlay styles
+  loadingOverlay: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "transparent",
+  },
+  loadingText: {
+    marginTop: 16,
+    fontSize: 16,
+    color: "#6B7280",
+    textAlign: "center",
+  },
+  darkLoadingText: {
+    color: "#A0AEC0",
   },
 
   header: {
@@ -2052,7 +3256,7 @@ const styles = StyleSheet.create({
   // Action Buttons
   billActions: {
     flexDirection: "row",
-    gap: 8,
+    gap: 12,
     marginTop: 4,
   },
   actionButton: {
@@ -2238,7 +3442,7 @@ const styles = StyleSheet.create({
   uploadButton: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#2356A8",
+    backgroundColor: "#8B4513",
     paddingHorizontal: 24,
     paddingVertical: 14,
     borderRadius: 12,
@@ -2249,7 +3453,7 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
   darkUploadButton: {
-    backgroundColor: "#4A90E2",
+    backgroundColor: "#D69E2E",
   },
   uploadButtonText: {
     color: "#fff",
@@ -2294,10 +3498,10 @@ const styles = StyleSheet.create({
   modalTitle: {
     fontSize: 24,
     fontWeight: "700",
-    color: "#2356A8",
+    color: "#8B4513", // Brown theme for consistency
   },
   darkModalTitle: {
-    color: "#D69E2E",
+    color: "#D69E2E", // Gold theme for dark mode
   },
   closeButton: {
     padding: 4,
@@ -2332,7 +3536,7 @@ const styles = StyleSheet.create({
     marginRight: 8,
   },
   inputGroup: {
-    marginBottom: 24,
+    marginBottom: 20,
   },
   inputLabel: {
     fontSize: 16,
@@ -2380,6 +3584,24 @@ const styles = StyleSheet.create({
   },
   darkDateButtonText: {
     color: "#FFFFFF",
+  },
+  dateDoneButton: {
+    alignSelf: "flex-end",
+    margin: 10,
+    padding: 10,
+    backgroundColor: "#8B4513",
+    borderRadius: 8,
+  },
+  darkDateDoneButton: {
+    backgroundColor: "#D69E2E",
+  },
+  dateDoneButtonText: {
+    color: "#fff",
+    fontWeight: "bold",
+    fontSize: 16,
+  },
+  darkDateDoneButtonText: {
+    color: "#fff",
   },
   dropdown: {
     borderWidth: 1,
@@ -2467,7 +3689,10 @@ const styles = StyleSheet.create({
     borderColor: "#718096",
   },
   saveButton: {
-    backgroundColor: "#2356A8",
+    backgroundColor: "#8B4513", // Brown theme for consistency
+  },
+  darkSaveButton: {
+    backgroundColor: "#D69E2E", // Gold theme for dark mode
   },
   cancelButtonText: {
     color: "#374151",
@@ -2481,6 +3706,9 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontSize: 16,
     fontWeight: "600",
+  },
+  darkSaveButtonText: {
+    color: "#fff",
   },
 
   // Bill Details Modal Styles
@@ -2680,4 +3908,167 @@ const styles = StyleSheet.create({
   darkSplitTypeText: {
     color: "#D69E2E",
   },
+
+  // Custom Split Styles
+  customSplitRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginVertical: 8,
+    paddingHorizontal: 4,
+  },
+  participantName: {
+    fontSize: 16,
+    fontWeight: "500",
+    color: "#374151",
+    flex: 1,
+  },
+  darkParticipantName: {
+    color: "#FFFFFF",
+  },
+  customSplitInputContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    width: 100,
+  },
+  customSplitPrefix: {
+    fontSize: 14,
+    color: "#8B4513",
+    marginRight: 4,
+    fontWeight: "600",
+  },
+  customSplitInput: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: "#D1D5DB",
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    fontSize: 14,
+    backgroundColor: "#FFFFFF",
+    color: "#374151",
+    textAlign: "right",
+  },
+  darkCustomSplitInput: {
+    backgroundColor: "#374151",
+    borderColor: "#4B5563",
+    color: "#F9FAFB",
+  },
+  totalValidation: {
+    marginTop: 16,
+    padding: 12,
+    backgroundColor: "#F8FAFC",
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+  },
+  darkTotalValidation: {
+    backgroundColor: "#1A202C",
+    borderColor: "#4A5568",
+  },
+  totalText: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#374151",
+    marginBottom: 4,
+  },
+  darkTotalText: {
+    color: "#FFFFFF",
+  },
+  expectedText: {
+    fontSize: 14,
+    color: "#6B7280",
+  },
+  darkExpectedText: {
+    color: "#A0AEC0",
+  },
 });
+
+// Error Boundary Component for crash protection (commented out to avoid unused warning)
+// Uncomment and wrap HistoryScreen if needed for production error handling
+/* 
+class HistoryErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error, errorInfo) {
+    // Error caught and handled silently
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <View style={{ 
+          flex: 1, 
+          justifyContent: 'center', 
+          alignItems: 'center', 
+          padding: 20,
+          backgroundColor: '#EFE4D2'
+        }}>
+          <Text style={{ 
+            fontSize: 24, 
+            fontWeight: 'bold', 
+            marginBottom: 16,
+            color: '#8B4513',
+            textAlign: 'center'
+          }}>
+            📊 History Unavailable
+          </Text>
+          <Text style={{ 
+            fontSize: 16,
+            textAlign: 'center', 
+            color: '#6B7280',
+            marginBottom: 20,
+            lineHeight: 22
+          }}>
+            We're having trouble loading your expense history. Please restart the app or contact support if this persists.
+          </Text>
+        </View>
+      );
+    }
+
+    return this.props.children;
+  }
+}
+*/
+
+// PropTypes for HistoryScreen component
+HistoryScreen.propTypes = {
+  bills: PropTypes.arrayOf(
+    PropTypes.shape({
+      id: PropTypes.string.isRequired,
+      name: PropTypes.string.isRequired,
+      amount: PropTypes.oneOfType([PropTypes.string, PropTypes.number])
+        .isRequired,
+      currency: PropTypes.string,
+      createdAt: PropTypes.string,
+      payer: PropTypes.string,
+      splitWith: PropTypes.arrayOf(PropTypes.string),
+      splitType: PropTypes.string,
+      note: PropTypes.string,
+      photoUri: PropTypes.string,
+    })
+  ).isRequired,
+  deleteBill: PropTypes.func.isRequired,
+  editBill: PropTypes.func.isRequired,
+  addBill: PropTypes.func.isRequired,
+  friends: PropTypes.arrayOf(
+    PropTypes.shape({
+      name: PropTypes.string.isRequired,
+      emoji: PropTypes.string,
+    })
+  ).isRequired,
+  profileName: PropTypes.string.isRequired,
+  profileEmoji: PropTypes.string,
+  darkMode: PropTypes.bool,
+};
+
+HistoryScreen.defaultProps = {
+  darkMode: false,
+};

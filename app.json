@@ -32,7 +32,8 @@
           "photosPermission": "We need access to your photos to attach receipts.",
           "cameraPermission": "We need access to your camera to take receipt photos."
         }
-      ]
+      ],
+      "expo-font"
     ]
   }
 }

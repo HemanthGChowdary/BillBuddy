@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from "react";
+import { useFocusEffect } from "@react-navigation/native";
 import {
   View,
   Text,
@@ -14,7 +15,12 @@ import {
   Modal,
   ScrollView,
   Share,
+  KeyboardAvoidingView,
+  Platform,
+  StatusBar,
+  StyleSheet,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
@@ -31,16 +37,17 @@ const FriendItem = React.memo(
     lastActivity,
     darkMode = false,
     profileName,
+    isDeletingFriend, // Add loading state prop
   }) => {
     const getBalanceText = (balance, name) => {
       if (Math.abs(balance) < 0.01) return "All settled up"; // Better than "No pending balances"
       if (balance > 0)
-        return `${name} owes ${profileName || "you"} $${Math.abs(
+        return `${name || "Friend"} owes ${profileName} $${Math.abs(
           balance
         ).toFixed(2)}`;
-      return `${profileName || "You"} owes ${name} $${Math.abs(balance).toFixed(
-        2
-      )}`;
+      return `${profileName} owes ${name || "Friend"} $${Math.abs(
+        balance
+      ).toFixed(2)}`;
     };
 
     const getBalanceColor = (balance) => {
@@ -76,16 +83,17 @@ const FriendItem = React.memo(
       <Animated.View
         style={{
           backgroundColor: darkMode ? "#2D3748" : "#FFFFFF",
-          borderRadius: 16,
-          padding: 16,
-          marginBottom: 12,
+          borderRadius: 20,
+          padding: 20,
+          marginBottom: 16,
+          marginHorizontal: 4,
           borderColor: darkMode ? "#4A5568" : "#e0e0e0",
           borderWidth: 1,
           shadowColor: darkMode ? "#000000" : "#000000",
-          shadowOffset: { width: 0, height: 2 },
-          shadowOpacity: darkMode ? 0.3 : 0.08,
-          shadowRadius: 8,
-          elevation: 4,
+          shadowOffset: { width: 0, height: 3 },
+          shadowOpacity: darkMode ? 0.4 : 0.1,
+          shadowRadius: 12,
+          elevation: 6,
           transform: [
             {
               scale: animatedValue.interpolate({
@@ -100,24 +108,24 @@ const FriendItem = React.memo(
           onPress={() =>
             navigation.navigate("FriendDetail", { friendName: item.name })
           }
-          style={{ marginBottom: 12 }}
+          style={{ marginBottom: 20 }}
         >
-          <View style={{ flexDirection: "row", alignItems: "center" }}>
+          <View style={{ flexDirection: "row", alignItems: "flex-start" }}>
             {/* Avatar with Status Indicator */}
-            <View style={{ position: "relative", marginRight: 16 }}>
+            <View style={{ position: "relative", marginRight: 20 }}>
               <View
                 style={{
-                  width: 52,
-                  height: 52,
-                  borderRadius: 26,
+                  width: 60,
+                  height: 60,
+                  borderRadius: 30,
                   backgroundColor: darkMode ? "#4A5568" : "#EFE4D2",
                   justifyContent: "center",
                   alignItems: "center",
-                  borderWidth: 2,
+                  borderWidth: 3,
                   borderColor: getAvatarBorderColor(balance),
                 }}
               >
-                <Text style={{ fontSize: 24 }}>{item.emoji}</Text>
+                <Text style={{ fontSize: 28 }}>{item.emoji}</Text>
               </View>
 
               {/* Status Indicator - Top Right Corner */}
@@ -146,12 +154,12 @@ const FriendItem = React.memo(
                 style={{
                   flexDirection: "row",
                   alignItems: "center",
-                  marginBottom: 2,
+                  marginBottom: 8,
                 }}
               >
                 <Text
                   style={{
-                    fontSize: 18,
+                    fontSize: 20,
                     fontWeight: "600",
                     color: darkMode ? "#E2E8F0" : "#2D3748",
                     flex: 1,
@@ -164,9 +172,9 @@ const FriendItem = React.memo(
                 {/* Online/Offline Status Text */}
                 <Text
                   style={{
-                    fontSize: 12,
+                    fontSize: 13,
                     color: getStatusColor(),
-                    fontWeight: "500",
+                    fontWeight: "600",
                     marginLeft: 8,
                   }}
                 >
@@ -176,10 +184,11 @@ const FriendItem = React.memo(
 
               <Text
                 style={{
-                  fontSize: 14,
+                  fontSize: 16,
                   color: getBalanceColor(balance),
                   fontWeight: "500",
-                  marginBottom: 2,
+                  marginBottom: 8,
+                  lineHeight: 22,
                 }}
               >
                 {getBalanceText(balance, item.name)}
@@ -188,8 +197,9 @@ const FriendItem = React.memo(
               {lastActivity && (
                 <Text
                   style={{
-                    fontSize: 12,
+                    fontSize: 13,
                     color: darkMode ? "#A0AEC0" : "#718096",
+                    marginBottom: 4,
                   }}
                 >
                   Last activity: {lastActivity}
@@ -199,96 +209,75 @@ const FriendItem = React.memo(
           </View>
         </Pressable>
 
-        {/* Action Buttons with enhanced dark mode styling */}
-        <View
-          style={{
-            flexDirection: "row",
-            justifyContent: "space-between",
-            gap: 8,
-          }}
-        >
-          {/* Invite Button - matches History Duplicate button */}
+        {/* Action Buttons */}
+        <View style={styles.friendActions}>
+          {/* Invite Button */}
           <Pressable
             onPress={() => onInvite(item)}
             style={({ pressed }) => [
-              {
-                backgroundColor: darkMode ? "#2D4A34" : "#F1F8E9",
-                borderRadius: 16,
-                paddingVertical: 10,
-                paddingHorizontal: 14,
-                flex: 1,
-                alignItems: "center",
-                borderWidth: 1,
-                borderColor: darkMode ? "#4CAF50" : "#C8E6C9",
-              },
-              pressed && { opacity: 0.7 },
+              styles.actionButton,
+              styles.inviteButton,
+              darkMode && styles.darkInviteButton,
+              pressed && styles.actionButtonPressed,
             ]}
           >
             <Text
-              style={{
-                fontSize: 13,
-                color: darkMode ? "#81C784" : "#388E3C",
-                fontWeight: "500",
-              }}
+              style={[
+                styles.inviteButtonText,
+                darkMode && styles.darkInviteButtonText,
+              ]}
             >
               Invite
             </Text>
           </Pressable>
 
-          {/* Edit Button - matches History Edit button */}
+          {/* Edit Button */}
           <Pressable
             onPress={() => onEdit(item.name)}
             style={({ pressed }) => [
-              {
-                backgroundColor: darkMode ? "#3D3D3D" : "#F8F4E8",
-                borderRadius: 16,
-                paddingVertical: 10,
-                paddingHorizontal: 14,
-                flex: 1,
-                alignItems: "center",
-                borderWidth: 1,
-                borderColor: darkMode ? "#D69E2E" : "#D4A574",
-              },
-              pressed && { opacity: 0.7 },
+              styles.actionButton,
+              styles.editButton,
+              darkMode && styles.darkEditButton,
+              pressed && styles.actionButtonPressed,
             ]}
           >
             <Text
-              style={{
-                fontSize: 13,
-                color: darkMode ? "#D69E2E" : "#8B4513",
-                fontWeight: "500",
-              }}
+              style={[
+                styles.editButtonText,
+                darkMode && styles.darkEditButtonText,
+              ]}
             >
               Edit
             </Text>
           </Pressable>
 
-          {/* Delete Button - matches History Delete button */}
+          {/* Delete Button with loading state */}
           <Pressable
             onPress={() => onDelete(item.name)}
+            disabled={isDeletingFriend === item.name}
             style={({ pressed }) => [
-              {
-                backgroundColor: darkMode ? "#4A2D32" : "#FFF5F5",
-                borderRadius: 16,
-                paddingVertical: 10,
-                paddingHorizontal: 14,
-                flex: 1,
-                alignItems: "center",
-                borderWidth: 1,
-                borderColor: darkMode ? "#F44336" : "#FFCDD2",
-              },
-              pressed && { opacity: 0.7 },
+              styles.actionButton,
+              styles.deleteButton,
+              darkMode && styles.darkDeleteButton,
+              pressed && styles.actionButtonPressed,
+              isDeletingFriend === item.name && { opacity: 0.5 },
             ]}
           >
-            <Text
-              style={{
-                fontSize: 13,
-                color: darkMode ? "#EF5350" : "#D32F2F",
-                fontWeight: "500",
-              }}
-            >
-              Delete
-            </Text>
+            {isDeletingFriend === item.name ? (
+              <ActivityIndicator
+                size="small"
+                color={darkMode ? "#EF5350" : "#D32F2F"}
+              />
+            ) : (
+              <Text
+                style={[
+                  styles.deleteButtonText,
+                  darkMode && styles.darkDeleteButtonText,
+                ]}
+              >
+                Delete
+              </Text>
+            )}
           </Pressable>
         </View>
       </Animated.View>
@@ -299,13 +288,18 @@ const FriendItem = React.memo(
 const FriendsScreen = ({
   friends,
   setFriends,
+  syncFriends,
   navigation,
   bills,
   profileName,
   profileEmoji,
   setProfileEmoji,
   darkMode = false,
+  currentUser, // Add current user context
 }) => {
+  const insets = useSafeAreaInsets();
+  const navigationSpacing = Math.max(insets.bottom, 20) + 10 + 30; // Navigation bar spacing
+
   const [friend, setFriend] = useState("");
   const [emoji, setEmoji] = useState("");
   const [email, setEmail] = useState("");
@@ -315,10 +309,14 @@ const FriendsScreen = ({
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isDeletingFriend, setIsDeletingFriend] = useState(null); // Track which friend is being deleted
   const [showAddModal, setShowAddModal] = useState(false);
   const [sortBy, setSortBy] = useState("name");
   const [filterBy, setFilterBy] = useState("all");
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [formErrors, setFormErrors] = useState({});
+  const [allSettlements, setAllSettlements] = useState({}); // Store settlements for all friends
+  const [isCalculatingBalances, setIsCalculatingBalances] = useState(false);
 
   // Animation for list items
   const animatedValue = useState(new Animated.Value(0))[0];
@@ -344,12 +342,12 @@ const FriendsScreen = ({
   // Positive balance = friend owes current user
   // Negative balance = current user owes friend
   const friendBalances = useMemo(() => {
+    setIsCalculatingBalances(true);
     const balances = {};
     const currentUser = profileName?.trim();
 
     // Ensure we have a valid profile name
     if (!currentUser) {
-      console.warn("No profile name set. User should sign in first.");
       return {};
     }
 
@@ -360,33 +358,166 @@ const FriendsScreen = ({
 
     // Process each bill
     bills.forEach((bill) => {
-      const totalParticipants = bill.splitWith.length;
-      if (totalParticipants === 0) return; // Skip invalid bills
+      const amount = parseFloat(bill.amount || 0);
+      const splitWith = bill.splitWith || [];
+      const payer = bill.payer;
+      const splitType = bill.splitType || "equal";
+      const splitAmounts = bill.splitAmounts || {};
 
-      const splitAmount = bill.amount / totalParticipants;
+      if (amount <= 0 || splitWith.length === 0) return; // Skip invalid bills
 
       // Only process bills where the current user is involved
-      if (!bill.splitWith.includes(currentUser) && bill.payer !== currentUser) {
+      if (!splitWith.includes(currentUser) && payer !== currentUser) {
         return;
       }
 
-      if (bill.payer === currentUser) {
+      // Calculate individual amounts based on split type
+      let individualAmounts = {};
+
+      if (splitType === "exact" && splitAmounts) {
+        individualAmounts = splitAmounts;
+      } else if (splitType === "percentage" && splitAmounts) {
+        splitWith.forEach((person) => {
+          const percentage = splitAmounts[person] || 0;
+          individualAmounts[person] = (amount * percentage) / 100;
+        });
+      } else {
+        // Equal split (default)
+        const perPersonAmount = amount / splitWith.length;
+        splitWith.forEach((person) => {
+          individualAmounts[person] = perPersonAmount;
+        });
+      }
+
+      if (payer === currentUser) {
         // Current user paid the bill - friends owe the current user
-        bill.splitWith.forEach((person) => {
+        splitWith.forEach((person) => {
           if (person !== currentUser && balances.hasOwnProperty(person)) {
-            balances[person] += splitAmount; // Friend owes current user
+            balances[person] += individualAmounts[person] || 0; // Friend owes current user
           }
         });
-      } else if (balances.hasOwnProperty(bill.payer)) {
+      } else if (
+        balances.hasOwnProperty(payer) &&
+        splitWith.includes(currentUser)
+      ) {
         // A friend paid the bill, and current user is in the split
-        if (bill.splitWith.includes(currentUser)) {
-          balances[bill.payer] -= splitAmount; // Current user owes the friend
-        }
+        // Current user owes the payer friend
+        balances[payer] -= individualAmounts[currentUser] || 0; // Current user owes the friend (negative = user owes friend)
       }
     });
 
+    // Calculate the total bill-based balance (without settlements)
+    const billBasedBalances = { ...balances };
+
+    // Apply settlements to adjust balances - only if there are bills involving both users
+    friends.forEach((friend) => {
+      const friendSettlements = allSettlements[friend.name] || [];
+
+      // Check if there are any bills involving this friend and current user
+      const hasValidBillsWithFriend = bills.some((bill) => {
+        const isCurrentUserInvolved =
+          bill.payer === currentUser ||
+          (bill.splitWith && bill.splitWith.includes(currentUser));
+        const isFriendInvolved =
+          bill.payer === friend.name ||
+          (bill.splitWith && bill.splitWith.includes(friend.name));
+        return isCurrentUserInvolved && isFriendInvolved;
+      });
+
+      // Only apply settlements if there are valid bills between users
+      if (!hasValidBillsWithFriend) {
+        // Reset balance to 0 if no bills exist between users - ignore settlements
+        balances[friend.name] = 0;
+        return;
+      }
+
+      // Start with the bill-based balance
+      let currentBalance = billBasedBalances[friend.name];
+
+      // Only apply settlements that were made AFTER bills exist between users
+      // This prevents old settlements from affecting new bill calculations
+      const billDates = bills
+        .filter((bill) => {
+          const isCurrentUserInvolved =
+            bill.payer === currentUser ||
+            (bill.splitWith && bill.splitWith.includes(currentUser));
+          const isFriendInvolved =
+            bill.payer === friend.name ||
+            (bill.splitWith && bill.splitWith.includes(friend.name));
+          return isCurrentUserInvolved && isFriendInvolved;
+        })
+        .map((bill) => new Date(bill.date || 0));
+
+      const firstBillDate =
+        billDates.length > 0 ? Math.min(...billDates) : new Date();
+
+      // Filter settlements to only include those after bills started
+      const validSettlements = friendSettlements.filter((settlement) => {
+        const settlementDate = new Date(settlement.date);
+        return settlementDate >= firstBillDate;
+      });
+
+      // Sort settlements by date to apply them chronologically
+      const sortedSettlements = validSettlements.sort(
+        (a, b) => new Date(a.date) - new Date(b.date)
+      );
+
+      sortedSettlements.forEach((settlement) => {
+        const settleAmount =
+          Math.round(parseFloat(settlement.amount) * 100) / 100;
+        const direction = settlement.direction;
+
+        // Apply settlement to current balance
+        // Positive balance = friend owes user, Negative balance = user owes friend
+        let friendOwesUser = currentBalance > 0 ? currentBalance : 0;
+        let userOwesFriend = currentBalance < 0 ? Math.abs(currentBalance) : 0;
+
+        if (
+          direction === "user_to_friend" ||
+          (!direction && settlement.payerName === currentUser)
+        ) {
+          // Current user paid the friend, so reduce what user owes friend
+          if (userOwesFriend >= settleAmount) {
+            userOwesFriend -= settleAmount;
+          } else {
+            // If settlement is more than owed, friend now owes user the difference
+            const remaining = settleAmount - userOwesFriend;
+            userOwesFriend = 0;
+            friendOwesUser += remaining;
+          }
+        } else if (
+          direction === "friend_to_user" ||
+          (!direction && settlement.payerName === friend.name)
+        ) {
+          // Friend paid the user, so reduce what friend owes user
+          if (friendOwesUser >= settleAmount) {
+            friendOwesUser -= settleAmount;
+          } else {
+            // If settlement is more than owed, user now owes friend the difference
+            const remaining = settleAmount - friendOwesUser;
+            friendOwesUser = 0;
+            userOwesFriend += remaining;
+          }
+        }
+
+        // Update current balance for next settlement
+        if (friendOwesUser > userOwesFriend) {
+          currentBalance = friendOwesUser - userOwesFriend;
+        } else {
+          currentBalance = -(userOwesFriend - friendOwesUser);
+        }
+      });
+
+      // Set the final balance after all settlements and round to avoid floating-point precision errors
+      const roundedBalance = Math.round(currentBalance * 100) / 100;
+      balances[friend.name] = roundedBalance;
+    });
+
+    // Use setTimeout to set loading to false after calculation completes
+    setTimeout(() => setIsCalculatingBalances(false), 0);
+
     return balances;
-  }, [friends, bills, profileName]);
+  }, [friends, bills, profileName, allSettlements]);
 
   // Enhanced filtered and sorted friends
   const processedFriends = useMemo(() => {
@@ -437,32 +568,41 @@ const FriendsScreen = ({
   }, [friends, searchQuery, filterBy, sortBy, friendBalances]);
 
   // Save profile emoji
-  const saveProfileEmoji = useCallback(async (newEmoji) => {
-    try {
-      await AsyncStorage.setItem("profileEmoji", newEmoji);
-      setProfileEmoji(newEmoji);
-    } catch (error) {
-      console.error("Failed to save profile emoji:", error);
-    }
-  }, [setProfileEmoji]);
+  const saveProfileEmoji = useCallback(
+    async (newEmoji) => {
+      try {
+        // Update the global state immediately
+        setProfileEmoji(newEmoji);
 
-  // Load friends with better error handling
+        // The global App.js useEffect will handle saving to AsyncStorage
+      } catch (error) {
+        console.error("Failed to save profile emoji:", error);
+      }
+    },
+    [setProfileEmoji]
+  );
+
+  // Load friends with better error handling - now user-scoped
   const loadFriends = useCallback(async () => {
     try {
       setIsLoading(true);
-      const saved = await AsyncStorage.getItem("friends");
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        const normalized = parsed.map((f) => ({
-          name: f.name,
-          emoji: f.emoji || "👤",
-          email: f.email || "",
-          phone: f.phone || "",
-          status: f.status || "active",
-          lastActivity: f.lastActivity || null,
-          id: f.id || `friend-${Date.now()}-${Math.random()}`,
-        }));
-        setFriends(normalized);
+      // Use profileName as user identifier since we don't have full auth system
+      const userId = currentUser?.id || profileName?.trim() || "default_user";
+      if (userId) {
+        const saved = await AsyncStorage.getItem(`friends_${userId}`);
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          const normalized = parsed.map((f) => ({
+            name: f.name,
+            emoji: f.emoji || "👤",
+            email: f.email || "",
+            phone: f.phone || "",
+            status: f.status || "active",
+            lastActivity: f.lastActivity || null,
+            id: f.id || `friend-${Date.now()}-${Math.random()}`,
+          }));
+          setFriends(normalized);
+        }
       }
     } catch (err) {
       console.error("Failed to load friends", err);
@@ -470,17 +610,26 @@ const FriendsScreen = ({
     } finally {
       setIsLoading(false);
     }
-  }, [setFriends]);
+  }, [setFriends, currentUser]);
 
-  // Save friends with debouncing
-  const saveFriends = useCallback(async (friendsToSave) => {
-    try {
-      await AsyncStorage.setItem("friends", JSON.stringify(friendsToSave));
-    } catch (err) {
-      console.error("Failed to save friends", err);
-      Alert.alert("Error", "Failed to save changes.");
-    }
-  }, []);
+  // Save friends with debouncing - now user-scoped
+  const saveFriends = useCallback(
+    async (friendsToSave) => {
+      try {
+        const userId = currentUser?.id || profileName?.trim() || "default_user";
+        if (userId && userId !== "default_user") {
+          await AsyncStorage.setItem(
+            `friends_${userId}`,
+            JSON.stringify(friendsToSave)
+          );
+        }
+      } catch (err) {
+        console.error("Failed to save friends", err);
+        Alert.alert("Error", "Failed to save changes.");
+      }
+    },
+    [currentUser]
+  );
 
   useEffect(() => {
     loadFriends();
@@ -489,72 +638,151 @@ const FriendsScreen = ({
   useEffect(() => {
     if (friends.length > 0) {
       saveFriends(friends);
+      // Sync with App.js state
+      if (syncFriends) {
+        syncFriends(friends);
+      }
     }
-  }, [friends, saveFriends]);
+  }, [friends, saveFriends, syncFriends]);
 
-  // Enhanced form validation
+  // Load settlements for all friends - extracted to separate function
+  const loadAllSettlements = useCallback(async () => {
+    const currentUser = profileName?.trim();
+    if (!currentUser) return;
+
+    const settlementsData = {};
+
+    for (const friend of friends) {
+      try {
+        // Use the same consistent key as in FriendDetailScreen
+        const userA = currentUser < friend.name ? currentUser : friend.name;
+        const userB = currentUser < friend.name ? friend.name : currentUser;
+        const settlementKey = `settlements_${userA}_${userB}`;
+
+        const saved = await AsyncStorage.getItem(settlementKey);
+        if (saved) {
+          const settlements = JSON.parse(saved);
+          settlementsData[friend.name] = settlements;
+        } else {
+          settlementsData[friend.name] = [];
+        }
+      } catch (error) {
+        console.error(`Failed to load settlements for ${friend.name}:`, error);
+        settlementsData[friend.name] = [];
+      }
+    }
+
+    // Always update settlements to ensure latest data
+    setAllSettlements(settlementsData);
+  }, [friends, profileName]);
+
+  // Load settlements on component mount and when dependencies change
+  useEffect(() => {
+    loadAllSettlements();
+  }, [loadAllSettlements]);
+
+  // Reload settlements when screen comes into focus (after returning from FriendDetailScreen)
+  useFocusEffect(
+    useCallback(() => {
+      loadAllSettlements();
+    }, [loadAllSettlements])
+  );
+
+  // Simplified form validation - only check friend name
   const validateFriend = useCallback(
     (name, currentEmoji, currentEmail, currentPhone) => {
-      const trimmed = name.trim();
-      const trimmedEmoji = currentEmoji.trim() || "👤";
-      const trimmedEmail = currentEmail.trim();
-      const trimmedPhone = currentPhone.trim();
+      try {
+        // Enhanced sanitization for all fields
+        const sanitizedName = name.replace(/[<>{}"'&]/g, "").trim();
+        const sanitizedEmoji = currentEmoji.trim() || "👤";
+        const sanitizedEmail = currentEmail
+          .toLowerCase()
+          .replace(/[<>"'&]/g, "")
+          .trim();
+        const sanitizedPhone = currentPhone.replace(/[^+\d\s()-]/g, "").trim();
 
-      if (!trimmed) {
-        return { isValid: false, message: "Please enter a friend's name." };
-      }
+        // Name validation only
+        if (!sanitizedName) {
+          return { isValid: false, message: "Please enter a friend's name." };
+        }
 
-      if (trimmed.length > 50) {
+        if (sanitizedName.length < 2) {
+          return {
+            isValid: false,
+            message: "Name must be at least 2 characters long.",
+          };
+        }
+
+        if (sanitizedName.length > 20) {
+          return {
+            isValid: false,
+            message: "Name is too long (max 20 characters).",
+          };
+        }
+
+        if (sanitizedName.toLowerCase() === (profileName || "").toLowerCase()) {
+          return {
+            isValid: false,
+            message: "You are already included by default.",
+          };
+        }
+
+        // Optional email validation
+        if (sanitizedEmail) {
+          const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+          if (!emailRegex.test(sanitizedEmail)) {
+            return {
+              isValid: false,
+              message: "Please enter a valid email address.",
+            };
+          }
+        }
+
+        // Optional phone validation
+        if (sanitizedPhone) {
+          const phoneRegex = /^[\+]?[1-9][\d]{0,15}$/;
+          const cleanPhone = sanitizedPhone.replace(/[\s()-]/g, "");
+          if (!phoneRegex.test(cleanPhone)) {
+            return {
+              isValid: false,
+              message: "Please enter a valid phone number.",
+            };
+          }
+        }
+
+        // Check for duplicate names only
+        const isDuplicate = friends.some((f) => {
+          try {
+            const nameMatch =
+              f.name.toLowerCase() === sanitizedName.toLowerCase();
+            return nameMatch && (!isEditing || f.name !== editingName);
+          } catch (error) {
+            console.error("Error checking duplicates:", error);
+            return false;
+          }
+        });
+
+        if (isDuplicate) {
+          return {
+            isValid: false,
+            message: "A friend with this name already exists!",
+          };
+        }
+
+        return {
+          isValid: true,
+          name: sanitizedName,
+          emoji: sanitizedEmoji,
+          email: sanitizedEmail,
+          phone: sanitizedPhone,
+        };
+      } catch (error) {
+        console.error("Validation error:", error);
         return {
           isValid: false,
-          message: "Name is too long (max 50 characters).",
+          message: "Validation failed. Please check your inputs.",
         };
       }
-
-      if (trimmed === profileName) {
-        return {
-          isValid: false,
-          message: "You are already included by default.",
-        };
-      }
-
-      // Email validation
-      if (trimmedEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
-        return {
-          isValid: false,
-          message: "Please enter a valid email address.",
-        };
-      }
-
-      // Phone validation (basic)
-      if (trimmedPhone && !/^\+?[\d\s\-\(\)]{10,}$/.test(trimmedPhone)) {
-        return {
-          isValid: false,
-          message: "Please enter a valid phone number.",
-        };
-      }
-
-      const isDuplicate = friends.some(
-        (f) =>
-          (f.name.toLowerCase() === trimmed.toLowerCase() ||
-            (trimmedEmail && f.email === trimmedEmail)) &&
-          (!isEditing || f.name !== editingName)
-      );
-
-      if (isDuplicate) {
-        return {
-          isValid: false,
-          message: "A friend with this name or email already exists!",
-        };
-      }
-
-      return {
-        isValid: true,
-        name: trimmed,
-        emoji: trimmedEmoji,
-        email: trimmedEmail,
-        phone: trimmedPhone,
-      };
     },
     [friends, profileName, isEditing, editingName]
   );
@@ -562,16 +790,16 @@ const FriendsScreen = ({
   const handleAddOrUpdateFriend = useCallback(async () => {
     if (isSubmitting) return;
 
-    const validation = validateFriend(friend, emoji, email, phone);
-
-    if (!validation.isValid) {
-      Alert.alert("Invalid Input", validation.message);
-      return;
-    }
-
-    setIsSubmitting(true);
-
     try {
+      const validation = validateFriend(friend, emoji, email, phone);
+
+      if (!validation.isValid) {
+        Alert.alert("Invalid Input", validation.message);
+        return;
+      }
+
+      setIsSubmitting(true);
+
       const newFriend = {
         name: validation.name,
         emoji: validation.emoji,
@@ -579,11 +807,17 @@ const FriendsScreen = ({
         phone: validation.phone,
         lastActivity: Date.now(),
         id: isEditing
-          ? friends.find((f) => f.name === editingName)?.id
+          ? friends.find((f) => f.name === editingName)?.id ||
+            `friend-${Date.now()}-${Math.random()}`
           : `friend-${Date.now()}-${Math.random()}`,
       };
 
       if (isEditing) {
+        const friendExists = friends.some((f) => f.name === editingName);
+        if (!friendExists) {
+          throw new Error("Friend to edit not found");
+        }
+
         setFriends((prev) =>
           prev.map((f) => (f.name === editingName ? newFriend : f))
         );
@@ -599,22 +833,48 @@ const FriendsScreen = ({
       setEmail("");
       setPhone("");
       setShowAddModal(false);
-      Keyboard.dismiss();
 
-      // Success animation
-      Animated.spring(animatedValue, {
-        toValue: 1,
-        useNativeDriver: true,
-      }).start(() => {
-        animatedValue.setValue(0);
-      });
+      try {
+        Keyboard.dismiss();
+      } catch (keyboardError) {
+        console.error("Keyboard dismiss error:", keyboardError);
+      }
+
+      // Success animation with error handling
+      try {
+        Animated.spring(animatedValue, {
+          toValue: 1,
+          useNativeDriver: true,
+        }).start(() => {
+          animatedValue.setValue(0);
+        });
+      } catch (animationError) {
+        console.error("Animation error:", animationError);
+      }
 
       // Send invitation if email provided
       if (validation.email && !isEditing) {
-        handleInviteFriend(newFriend);
+        try {
+          await handleInviteFriend(newFriend);
+        } catch (inviteError) {
+          console.error("Invite error:", inviteError);
+          // Don't fail the entire operation if invite fails
+        }
       }
+
+      // Show success message
+      Alert.alert(
+        "Success",
+        isEditing
+          ? "Friend updated successfully!"
+          : "Friend added successfully!"
+      );
     } catch (error) {
-      Alert.alert("Error", "Failed to save friend. Please try again.");
+      console.error("Save friend error:", error);
+      Alert.alert(
+        "Error",
+        error.message || "Failed to save friend. Please try again."
+      );
     } finally {
       setIsSubmitting(false);
     }
@@ -635,6 +895,10 @@ const FriendsScreen = ({
   const handleInviteFriend = useCallback(
     async (friendData) => {
       try {
+        if (!friendData || !friendData.name) {
+          throw new Error("Invalid friend data");
+        }
+
         const message = `Hi ${friendData.name}! ${
           profileName || "Your friend"
         } has invited you to join their expense sharing group. Download our app to start splitting bills together!`;
@@ -646,13 +910,24 @@ const FriendsScreen = ({
             [{ text: "OK" }]
           );
         } else {
-          await Share.share({
-            message: message,
-            title: "Join My Expense Group",
-          });
+          try {
+            await Share.share({
+              message: message,
+              title: "Join My Expense Group",
+            });
+          } catch (shareError) {
+            if (shareError.message !== "User did not share") {
+              throw shareError;
+            }
+            // User cancelled sharing, this is normal behavior
+          }
         }
       } catch (error) {
         console.error("Failed to send invitation:", error);
+        Alert.alert(
+          "Invitation Error",
+          "Failed to send invitation. Please try again."
+        );
       }
     },
     [profileName]
@@ -660,49 +935,96 @@ const FriendsScreen = ({
 
   const handleDelete = useCallback(
     (name) => {
-      const balance = friendBalances[name] || 0;
+      try {
+        if (!name || typeof name !== "string") {
+          throw new Error("Invalid friend name");
+        }
 
-      if (Math.abs(balance) > 0.01) {
+        const balance = friendBalances[name] || 0;
+
+        if (Math.abs(balance) > 0.01) {
+          Alert.alert(
+            "Cannot Delete Friend",
+            `${name} has an outstanding balance of $${Math.abs(balance).toFixed(
+              2
+            )}. Please settle all bills before removing them.`,
+            [{ text: "OK" }]
+          );
+          return;
+        }
+
         Alert.alert(
-          "Cannot Delete Friend",
-          `${name} has an outstanding balance of $${Math.abs(balance).toFixed(
-            2
-          )}. Please settle all bills before removing them.`,
-          [{ text: "OK" }]
-        );
-        return;
-      }
+          "Delete Friend",
+          `Are you sure you want to remove ${name} from your friends list?`,
+          [
+            { text: "Cancel", style: "cancel" },
+            {
+              text: "Delete",
+              style: "destructive",
+              onPress: async () => {
+                try {
+                  setIsDeletingFriend(name);
 
-      Alert.alert(
-        "Delete Friend",
-        `Are you sure you want to remove ${name} from your friends list?`,
-        [
-          { text: "Cancel", style: "cancel" },
-          {
-            text: "Delete",
-            style: "destructive",
-            onPress: () => {
-              setFriends((prev) => prev.filter((f) => f.name !== name));
+                  // Simulate async operation (would be API call in real app)
+                  await new Promise((resolve) => setTimeout(resolve, 500));
+
+                  setFriends((prev) => {
+                    const filtered = prev.filter((f) => f.name !== name);
+                    if (filtered.length === prev.length) {
+                      throw new Error("Friend not found");
+                    }
+                    return filtered;
+                  });
+
+                  Alert.alert(
+                    "Success",
+                    `${name} has been removed from your friends list.`
+                  );
+                } catch (error) {
+                  console.error("Delete friend error:", error);
+                  Alert.alert(
+                    "Error",
+                    "Failed to delete friend. Please try again."
+                  );
+                } finally {
+                  setIsDeletingFriend(null);
+                }
+              },
             },
-          },
-        ]
-      );
+          ]
+        );
+      } catch (error) {
+        console.error("Handle delete error:", error);
+        Alert.alert("Error", "Failed to process delete request.");
+      }
     },
     [friendBalances, setFriends]
   );
 
   const handleEdit = useCallback(
     (name) => {
-      const friendToEdit = friends.find((f) => f.name === name);
-      if (!friendToEdit) return;
+      try {
+        if (!name || typeof name !== "string") {
+          throw new Error("Invalid friend name");
+        }
 
-      setIsEditing(true);
-      setEditingName(name);
-      setFriend(friendToEdit.name);
-      setEmoji(friendToEdit.emoji || "");
-      setEmail(friendToEdit.email || "");
-      setPhone(friendToEdit.phone || "");
-      setShowAddModal(true);
+        const friendToEdit = friends.find((f) => f.name === name);
+        if (!friendToEdit) {
+          Alert.alert("Error", "Friend not found");
+          return;
+        }
+
+        setIsEditing(true);
+        setEditingName(name);
+        setFriend(friendToEdit.name || "");
+        setEmoji(friendToEdit.emoji || "👤");
+        setEmail(friendToEdit.email || "");
+        setPhone(friendToEdit.phone || "");
+        setShowAddModal(true);
+      } catch (error) {
+        console.error("Handle edit error:", error);
+        Alert.alert("Error", "Failed to edit friend. Please try again.");
+      }
     },
     [friends]
   );
@@ -715,7 +1037,30 @@ const FriendsScreen = ({
     setEmail("");
     setPhone("");
     setShowAddModal(false);
+    setFormErrors({});
   }, []);
+
+  // Simplified input handlers - only validate name
+  const handleNameChange = useCallback(
+    (text) => {
+      try {
+        const sanitized = text.replace(/[<>{}]/g, "").substring(0, 20);
+        setFriend(sanitized);
+
+        // Clear error if name becomes valid
+        if (
+          formErrors.name &&
+          sanitized.trim().length >= 2 &&
+          sanitized.trim().length <= 20
+        ) {
+          setFormErrors((prev) => ({ ...prev, name: null }));
+        }
+      } catch (error) {
+        console.error("Name input error:", error);
+      }
+    },
+    [formErrors.name]
+  );
 
   const renderFriendItem = useCallback(
     ({ item }) => (
@@ -734,6 +1079,7 @@ const FriendsScreen = ({
         }
         darkMode={darkMode}
         profileName={profileName}
+        isDeletingFriend={isDeletingFriend}
       />
     ),
     [
@@ -745,6 +1091,7 @@ const FriendsScreen = ({
       friendBalances,
       darkMode,
       profileName,
+      isDeletingFriend,
     ]
   );
 
@@ -752,26 +1099,30 @@ const FriendsScreen = ({
   const summaryStats = useMemo(() => {
     const totalFriends = friends.length;
     const activeBalances = Object.values(friendBalances).filter(
-      (b) => Math.abs(b) > 0.01
+      (b) => Math.abs(Math.round(b * 100) / 100) > 0.01
     ).length;
 
     let totalYouAreOwed = 0;
     let totalYouOwe = 0;
 
     Object.entries(friendBalances).forEach(([, balance]) => {
-      if (balance > 0) {
-        totalYouAreOwed += balance;
-      } else if (balance < 0) {
-        totalYouOwe += Math.abs(balance);
+      // Round to avoid floating-point precision issues
+      const roundedBalance = Math.round(balance * 100) / 100;
+      if (roundedBalance > 0) {
+        totalYouAreOwed += roundedBalance;
+      } else if (roundedBalance < 0) {
+        totalYouOwe += Math.abs(roundedBalance);
       }
     });
 
-    return {
+    const result = {
       totalFriends,
       activeBalances,
       totalOwed: totalYouAreOwed,
       totalOwe: totalYouOwe,
     };
+
+    return result;
   }, [friends, friendBalances]);
 
   if (isLoading) {
@@ -797,11 +1148,15 @@ const FriendsScreen = ({
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: theme.background }}>
+      <StatusBar
+        barStyle={darkMode ? "light-content" : "dark-content"}
+        backgroundColor={darkMode ? "#1A202C" : "#EFE4D2"}
+      />
       <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
         <View style={{ flex: 1 }}>
           {/* Header */}
-          <View style={{ padding: 20, paddingBottom: 0 }}>
-            <View style={{ marginBottom: 20 }}>
+          <View style={{ padding: 20, paddingTop: 10, paddingBottom: 0 }}>
+            <View style={{ marginBottom: 16 }}>
               <Text
                 style={{
                   fontSize: 28,
@@ -813,15 +1168,30 @@ const FriendsScreen = ({
               >
                 Friends Screen
               </Text>
-              <Text
+              <View
                 style={{
-                  fontSize: 16,
-                  color: theme.textSecondary,
-                  textAlign: "center",
+                  flexDirection: "row",
+                  alignItems: "center",
+                  justifyContent: "center",
                 }}
               >
-                Manage your friend connections
-              </Text>
+                <Text
+                  style={{
+                    fontSize: 16,
+                    color: theme.textSecondary,
+                    textAlign: "center",
+                  }}
+                >
+                  Manage your friend connections
+                </Text>
+                {isCalculatingBalances && (
+                  <ActivityIndicator
+                    size="small"
+                    color={theme.primary}
+                    style={{ marginLeft: 8 }}
+                  />
+                )}
+              </View>
             </View>
 
             {/* Summary Cards */}
@@ -931,7 +1301,7 @@ const FriendsScreen = ({
                   >
                     <Text style={{ fontSize: 24 }}>{profileEmoji}</Text>
                   </Pressable>
-                  
+
                   <View style={{ flex: 1 }}>
                     <Text
                       style={{
@@ -945,7 +1315,7 @@ const FriendsScreen = ({
                     >
                       {profileName || "Your Profile"}
                     </Text>
-                    
+
                     <Text
                       style={{
                         fontSize: 12,
@@ -956,49 +1326,24 @@ const FriendsScreen = ({
                     >
                       Tap emoji to change
                     </Text>
-                    
-                    {summaryStats.totalOwed > 0 && (
-                      <Text
-                        style={{
-                          fontSize: 13,
-                          fontWeight: "600",
-                          color: "#4CAF50",
-                          textAlign: "left",
-                          marginBottom: 2,
-                        }}
-                      >
-                        You are owed: ${summaryStats.totalOwed.toFixed(2)}
-                      </Text>
-                    )}
-                    
-                    {summaryStats.totalOwe > 0 && (
-                      <Text
-                        style={{
-                          fontSize: 13,
-                          fontWeight: "600",
-                          color: "#F44336",
-                          textAlign: "left",
-                          marginBottom: 2,
-                        }}
-                      >
-                        You owe: ${summaryStats.totalOwe.toFixed(2)}
-                      </Text>
-                    )}
-                    
-                    {summaryStats.totalOwed === 0 && summaryStats.totalOwe === 0 && (
-                      <Text
-                        style={{
-                          fontSize: 13,
-                          fontWeight: "600",
-                          color: theme.textSecondary,
-                          textAlign: "left",
-                          marginBottom: 2,
-                        }}
-                      >
-                        All settled up
-                      </Text>
-                    )}
-                    
+
+                    <Text
+                      style={{
+                        fontSize: 13,
+                        fontWeight: "600",
+                        color: theme.textSecondary,
+                        textAlign: "left",
+                        marginBottom: 2,
+                      }}
+                    >
+                      {summaryStats.totalOwed === 0 &&
+                      summaryStats.totalOwe === 0
+                        ? "All settled up"
+                        : `${summaryStats.activeBalances} active balance${
+                            summaryStats.activeBalances !== 1 ? "s" : ""
+                          }`}
+                    </Text>
+
                     <Text
                       style={{
                         fontSize: 11,
@@ -1185,7 +1530,12 @@ const FriendsScreen = ({
             data={processedFriends}
             keyExtractor={(item) => item.id || item.name}
             renderItem={renderFriendItem}
-            contentContainerStyle={{ padding: 20, paddingTop: 0, flexGrow: 1 }}
+            contentContainerStyle={{
+              padding: 20,
+              paddingTop: 0,
+              paddingBottom: navigationSpacing,
+              flexGrow: 1,
+            }}
             ListEmptyComponent={
               <View
                 style={{ alignItems: "center", marginTop: 60, padding: 20 }}
@@ -1251,164 +1601,192 @@ const FriendsScreen = ({
                 backgroundColor: theme.background,
               }}
             >
-              <View style={{ flex: 1, padding: 20 }}>
-                <View
-                  style={{
-                    flexDirection: "row",
-                    justifyContent: "space-between",
-                    alignItems: "center",
-                    marginBottom: 20,
-                  }}
-                >
-                  <Text
-                    style={{
-                      fontSize: 24,
-                      fontWeight: "bold",
-                      color: theme.primary,
-                    }}
-                  >
-                    {isEditing ? "Edit Friend" : "Add New Friend"}
-                  </Text>
-                  <Pressable onPress={cancelEdit}>
-                    <Text
-                      style={{
-                        fontSize: 16,
-                        color: theme.textSecondary,
-                      }}
-                    >
-                      Cancel
-                    </Text>
-                  </Pressable>
-                </View>
-
-                <ScrollView showsVerticalScrollIndicator={false}>
+              <KeyboardAvoidingView
+                style={{ flex: 1 }}
+                behavior={Platform.OS === "ios" ? "padding" : "height"}
+                keyboardVerticalOffset={0}
+              >
+                <View style={{ flex: 1, padding: 20 }}>
                   <View
                     style={{
-                      backgroundColor: theme.cardBackground,
-                      borderRadius: 16,
-                      padding: 20,
-                      borderWidth: 1,
-                      borderColor: theme.border,
+                      flexDirection: "row",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                      marginBottom: 20,
                     }}
                   >
-                    <TextInput
-                      placeholder="Friend's Name *"
-                      value={friend}
-                      onChangeText={setFriend}
+                    <Text
                       style={{
-                        borderWidth: 1,
-                        borderColor: theme.border,
-                        borderRadius: 12,
-                        padding: 14,
-                        backgroundColor: theme.inputBackground,
-                        fontSize: 16,
-                        color: theme.textPrimary,
-                        marginBottom: 16,
+                        fontSize: 24,
+                        fontWeight: "bold",
+                        color: theme.primary,
                       }}
-                      maxLength={50}
-                      placeholderTextColor={theme.placeholder}
-                    />
-
-                    <TextInput
-                      placeholder="Email Address"
-                      value={email}
-                      onChangeText={setEmail}
-                      keyboardType="email-address"
-                      autoCapitalize="none"
-                      style={{
-                        borderWidth: 1,
-                        borderColor: theme.border,
-                        borderRadius: 12,
-                        padding: 14,
-                        backgroundColor: theme.inputBackground,
-                        fontSize: 16,
-                        color: theme.textPrimary,
-                        marginBottom: 16,
-                      }}
-                      placeholderTextColor={theme.placeholder}
-                    />
-
-                    <TextInput
-                      placeholder="Phone Number"
-                      value={phone}
-                      onChangeText={setPhone}
-                      keyboardType="phone-pad"
-                      style={{
-                        borderWidth: 1,
-                        borderColor: theme.border,
-                        borderRadius: 12,
-                        padding: 14,
-                        backgroundColor: theme.inputBackground,
-                        fontSize: 16,
-                        color: theme.textPrimary,
-                        marginBottom: 16,
-                      }}
-                      placeholderTextColor={theme.placeholder}
-                    />
-
-                    <TextInput
-                      placeholder="Emoji (optional, defaults to 👤)"
-                      value={emoji}
-                      onChangeText={setEmoji}
-                      style={{
-                        borderWidth: 1,
-                        borderColor: theme.border,
-                        borderRadius: 12,
-                        padding: 14,
-                        backgroundColor: theme.inputBackground,
-                        fontSize: 16,
-                        color: theme.textPrimary,
-                        marginBottom: 24,
-                      }}
-                      maxLength={2}
-                      placeholderTextColor={theme.placeholder}
-                    />
-
-                    <Pressable
-                      onPress={handleAddOrUpdateFriend}
-                      disabled={isSubmitting}
-                      style={({ pressed }) => ({
-                        backgroundColor: isSubmitting
-                          ? theme.border
-                          : pressed
-                          ? theme.primaryPressed
-                          : theme.primary,
-                        paddingVertical: 16,
-                        borderRadius: 12,
-                        alignItems: "center",
-                      })}
                     >
-                      {isSubmitting ? (
-                        <ActivityIndicator color="#fff" />
-                      ) : (
-                        <Text
-                          style={{
-                            color: "#fff",
-                            fontWeight: "bold",
-                            fontSize: 16,
-                          }}
-                        >
-                          {isEditing ? "Update Friend" : "Add Friend"}
-                        </Text>
-                      )}
-                    </Pressable>
-
-                    {email && !isEditing && (
+                      {isEditing ? "Edit Friend" : "Add New Friend"}
+                    </Text>
+                    <Pressable onPress={cancelEdit}>
                       <Text
                         style={{
-                          textAlign: "center",
-                          color: theme.textTertiary,
-                          fontSize: 12,
-                          marginTop: 12,
-                          fontStyle: "italic",
+                          fontSize: 16,
+                          color: theme.textSecondary,
                         }}
                       >
-                        An invitation will be sent to their email
+                        Cancel
                       </Text>
-                    )}
+                    </Pressable>
                   </View>
-                </ScrollView>
-              </View>
+
+                  <ScrollView showsVerticalScrollIndicator={false}>
+                    <View
+                      style={{
+                        backgroundColor: theme.cardBackground,
+                        borderRadius: 16,
+                        padding: 20,
+                        borderWidth: 1,
+                        borderColor: theme.border,
+                      }}
+                    >
+                      <TextInput
+                        placeholder="Friend's Name *"
+                        value={friend}
+                        onChangeText={handleNameChange}
+                        style={{
+                          borderWidth: 1,
+                          borderColor: formErrors.name
+                            ? "#F44336"
+                            : theme.border,
+                          borderRadius: 12,
+                          padding: 14,
+                          backgroundColor: theme.inputBackground,
+                          fontSize: 16,
+                          color: theme.textPrimary,
+                          marginBottom: formErrors.name ? 4 : 16,
+                        }}
+                        maxLength={50}
+                        placeholderTextColor={theme.placeholder}
+                        accessibilityLabel="Friend's name input"
+                        accessibilityHint="Enter your friend's name"
+                      />
+                      {formErrors.name && (
+                        <Text
+                          style={{
+                            color: "#F44336",
+                            fontSize: 12,
+                            marginBottom: 12,
+                            marginLeft: 4,
+                          }}
+                        >
+                          {formErrors.name}
+                        </Text>
+                      )}
+
+                      <TextInput
+                        placeholder="Email Address (optional)"
+                        value={email}
+                        onChangeText={setEmail}
+                        keyboardType="email-address"
+                        autoCapitalize="none"
+                        style={{
+                          borderWidth: 1,
+                          borderColor: theme.border,
+                          borderRadius: 12,
+                          padding: 14,
+                          backgroundColor: theme.inputBackground,
+                          fontSize: 16,
+                          color: theme.textPrimary,
+                          marginBottom: 16,
+                        }}
+                        placeholderTextColor={theme.placeholder}
+                        accessibilityLabel="Email address input"
+                        accessibilityHint="Enter your friend's email address"
+                      />
+
+                      <TextInput
+                        placeholder="Phone Number (optional)"
+                        value={phone}
+                        onChangeText={setPhone}
+                        keyboardType="phone-pad"
+                        style={{
+                          borderWidth: 1,
+                          borderColor: theme.border,
+                          borderRadius: 12,
+                          padding: 14,
+                          backgroundColor: theme.inputBackground,
+                          fontSize: 16,
+                          color: theme.textPrimary,
+                          marginBottom: 16,
+                        }}
+                        placeholderTextColor={theme.placeholder}
+                        accessibilityLabel="Phone number input"
+                        accessibilityHint="Enter your friend's phone number"
+                      />
+
+                      <TextInput
+                        placeholder="Emoji (optional, defaults to 👤)"
+                        value={emoji}
+                        onChangeText={setEmoji}
+                        style={{
+                          borderWidth: 1,
+                          borderColor: theme.border,
+                          borderRadius: 12,
+                          padding: 14,
+                          backgroundColor: theme.inputBackground,
+                          fontSize: 16,
+                          color: theme.textPrimary,
+                          marginBottom: 24,
+                        }}
+                        maxLength={2}
+                        placeholderTextColor={theme.placeholder}
+                        accessibilityLabel="Friend emoji input"
+                        accessibilityHint="Enter one emoji for your friend's avatar"
+                      />
+
+                      <Pressable
+                        onPress={handleAddOrUpdateFriend}
+                        disabled={isSubmitting}
+                        style={({ pressed }) => ({
+                          backgroundColor: isSubmitting
+                            ? theme.border
+                            : pressed
+                            ? theme.primaryPressed
+                            : theme.primary,
+                          paddingVertical: 16,
+                          borderRadius: 12,
+                          alignItems: "center",
+                        })}
+                      >
+                        {isSubmitting ? (
+                          <ActivityIndicator color="#fff" />
+                        ) : (
+                          <Text
+                            style={{
+                              color: "#fff",
+                              fontWeight: "bold",
+                              fontSize: 16,
+                            }}
+                          >
+                            {isEditing ? "Update Friend" : "Add Friend"}
+                          </Text>
+                        )}
+                      </Pressable>
+
+                      {email && !isEditing && (
+                        <Text
+                          style={{
+                            textAlign: "center",
+                            color: theme.textTertiary,
+                            fontSize: 12,
+                            marginTop: 12,
+                            fontStyle: "italic",
+                          }}
+                        >
+                          An invitation will be sent to their email
+                        </Text>
+                      )}
+                    </View>
+                  </ScrollView>
+                </View>
+              </KeyboardAvoidingView>
             </SafeAreaView>
           </Modal>
 
@@ -1453,7 +1831,7 @@ const FriendsScreen = ({
                 >
                   Choose Your Emoji
                 </Text>
-                
+
                 <ScrollView
                   style={{ maxHeight: 300 }}
                   showsVerticalScrollIndicator={false}
@@ -1466,13 +1844,76 @@ const FriendsScreen = ({
                     }}
                   >
                     {[
-                      "😊", "😎", "🤗", "😄", "😃", "😁", "😆", "🥳", "😉", "🙂",
-                      "😇", "🤓", "😌", "😍", "🥰", "😘", "😗", "😚", "😙", "🤩",
-                      "🤔", "🤨", "😐", "😑", "😶", "🙄", "😏", "😣", "😥", "😮",
-                      "🤐", "😯", "😪", "😫", "🥱", "😴", "😛", "😝", "😜", "🤪",
-                      "🤡", "🥸", "🤠", "😺", "😸", "😹", "😻", "😼", "😽", "🙀",
-                      "👤", "👥", "👶", "👧", "🧒", "👦", "👩", "🧑", "👨", "👱‍♀️",
-                      "👱", "👱‍♂️", "👩‍🦰", "🧑‍🦰", "👨‍🦰", "👩‍🦱", "🧑‍🦱", "👨‍🦱", "👩‍🦲", "🧑‍🦲"
+                      "😊",
+                      "😎",
+                      "🤗",
+                      "😄",
+                      "😃",
+                      "😁",
+                      "😆",
+                      "🥳",
+                      "😉",
+                      "🙂",
+                      "😇",
+                      "🤓",
+                      "😌",
+                      "😍",
+                      "🥰",
+                      "😘",
+                      "😗",
+                      "😚",
+                      "😙",
+                      "🤩",
+                      "🤔",
+                      "🤨",
+                      "😐",
+                      "😑",
+                      "😶",
+                      "🙄",
+                      "😏",
+                      "😣",
+                      "😥",
+                      "😮",
+                      "🤐",
+                      "😯",
+                      "😪",
+                      "😫",
+                      "🥱",
+                      "😴",
+                      "😛",
+                      "😝",
+                      "😜",
+                      "🤪",
+                      "🤡",
+                      "🥸",
+                      "🤠",
+                      "😺",
+                      "😸",
+                      "😹",
+                      "😻",
+                      "😼",
+                      "😽",
+                      "🙀",
+                      "👤",
+                      "👥",
+                      "👶",
+                      "👧",
+                      "🧒",
+                      "👦",
+                      "👩",
+                      "🧑",
+                      "👨",
+                      "👱‍♀️",
+                      "👱",
+                      "👱‍♂️",
+                      "👩‍🦰",
+                      "🧑‍🦰",
+                      "👨‍🦰",
+                      "👩‍🦱",
+                      "🧑‍🦱",
+                      "👨‍🦱",
+                      "👩‍🦲",
+                      "🧑‍🦲",
                     ].map((emojiOption) => (
                       <Pressable
                         key={emojiOption}
@@ -1501,11 +1942,13 @@ const FriendsScreen = ({
                     ))}
                   </View>
                 </ScrollView>
-                
+
                 <Pressable
                   onPress={() => setShowEmojiPicker(false)}
                   style={({ pressed }) => ({
-                    backgroundColor: pressed ? theme.primaryPressed : theme.primary,
+                    backgroundColor: pressed
+                      ? theme.primaryPressed
+                      : theme.primary,
                     borderRadius: 12,
                     paddingVertical: 12,
                     marginTop: 20,
@@ -1530,5 +1973,74 @@ const FriendsScreen = ({
     </SafeAreaView>
   );
 };
+
+// Styles to match GroupsScreen and HistoryScreen action buttons
+const styles = StyleSheet.create({
+  // Action Buttons
+  friendActions: {
+    flexDirection: "row",
+    gap: 12,
+    marginTop: 4,
+  },
+  actionButton: {
+    flex: 1,
+    borderRadius: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    alignItems: "center",
+    borderWidth: 1,
+  },
+  actionButtonPressed: {
+    opacity: 0.7,
+  },
+  inviteButton: {
+    backgroundColor: "#F1F8E9",
+    borderColor: "#C8E6C9",
+  },
+  darkInviteButton: {
+    backgroundColor: "#2D4A34",
+    borderColor: "#4CAF50",
+  },
+  editButton: {
+    backgroundColor: "#F8F4E8",
+    borderColor: "#D4A574",
+  },
+  darkEditButton: {
+    backgroundColor: "#3D3D3D",
+    borderColor: "#D69E2E",
+  },
+  deleteButton: {
+    backgroundColor: "#FFF5F5",
+    borderColor: "#FFCDD2",
+  },
+  darkDeleteButton: {
+    backgroundColor: "#4A2D32",
+    borderColor: "#F44336",
+  },
+  inviteButtonText: {
+    fontSize: 13,
+    color: "#388E3C",
+    fontWeight: "500",
+  },
+  darkInviteButtonText: {
+    color: "#81C784",
+  },
+  editButtonText: {
+    fontSize: 13,
+    color: "#8B4513",
+    fontWeight: "500",
+  },
+  darkEditButtonText: {
+    color: "#D69E2E",
+  },
+  deleteButtonText: {
+    fontSize: 13,
+    color: "#D32F2F",
+    fontWeight: "500",
+  },
+  darkDeleteButtonText: {
+    color: "#EF5350",
+  },
+});
 
 export default FriendsScreen;

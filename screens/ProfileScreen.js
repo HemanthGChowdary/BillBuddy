@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, Component } from "react";
 import {
   View,
   Text,
@@ -15,22 +15,36 @@ import {
   Pressable,
   Linking,
   ActionSheetIOS,
+  StatusBar,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import DropDownPicker from "react-native-dropdown-picker";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import * as ImagePicker from "expo-image-picker";
+import PropTypes from "prop-types";
 
-export default function ProfileScreen({
+function ProfileScreen({
   profileName,
   setProfileName,
+  profileEmoji,
+  setProfileEmoji,
   profileEmail,
   setProfileEmail,
+  profilePhone,
+  setProfilePhone,
   darkMode,
   setDarkMode,
+  liquidGlassMode,
+  setLiquidGlassMode,
   onTabPress, // Function to be called on tab press
 }) {
+  const insets = useSafeAreaInsets();
+  const navigationSpacing = Math.max(insets.bottom, 20) + 10 + 10;
+
   // Navigation state
   const [currentTab, setCurrentTab] = useState("main"); // main, personal, security, notifications, feedback
+
+  // Note: isSignedIn removed as it was unused
 
   // Reset to main screen when tab is double-pressed
   useEffect(() => {
@@ -43,10 +57,11 @@ export default function ProfileScreen({
 
   // Core profile states
   const [countryCodeValue, setCountryCodeValue] = useState("+1-us");
-  const [phone, setPhone] = useState("");
+  const [phone, setPhone] = useState(profilePhone || "");
   const [profileImage, setProfileImage] = useState(null);
   const [errors, setErrors] = useState({});
   const [isLoading, setIsLoading] = useState(false);
+  const [currentUser, setCurrentUser] = useState(null);
 
   // Security states
   const [currentPassword, setCurrentPassword] = useState("");
@@ -55,14 +70,61 @@ export default function ProfileScreen({
   const [showPasswordSection, setShowPasswordSection] = useState(false);
   const [twoFactorAuth, setTwoFactorAuth] = useState(false);
 
-  // Essential preferences
-  const [emailNotifications, setEmailNotifications] = useState(true);
-  const [pushNotifications, setPushNotifications] = useState(true);
-  const [smsNotifications, setSmsNotifications] = useState(false);
-  // darkMode now comes from props
+  // User preferences - load from user data
+  const [userSettings, setUserSettings] = useState({
+    emailNotifications: true,
+    pushNotifications: true,
+    smsNotifications: false,
+  });
 
-  // Authentication state
-  const [isSignedIn, setIsSignedIn] = useState(true);
+  // Load settings and profile data from UserManager on component mount
+  useEffect(() => {
+    loadUserSettings();
+    loadProfileData();
+    loadCurrentUser();
+  }, []);
+
+  const loadCurrentUser = async () => {
+    try {
+      // For UI testing - check if we have a mock user
+      const mockUser = {
+        id: "test_user_123",
+        name: profileName || "Test User",
+        email: profileEmail || "test@example.com",
+        phone: phone || "",
+        profileImage: profileImage,
+      };
+
+      // Only set if we have actual profile data
+      if (profileName && profileEmail) {
+        setCurrentUser(mockUser);
+      }
+    } catch (error) {
+      // Error handled silently
+    }
+  };
+
+  const loadUserSettings = async () => {
+    try {
+      // For UI testing - use default settings
+      setUserSettings({
+        emailNotifications: true,
+        pushNotifications: true,
+        smsNotifications: false,
+      });
+    } catch (error) {
+      // Error handled silently
+    }
+  };
+
+  const loadProfileData = async () => {
+    try {
+      // For UI testing - no need to load from UserManager
+      // Profile data comes from props
+    } catch (error) {
+      // Error handled silently
+    }
+  };
 
   // Password visibility states
   const [showCurrentPassword, setShowCurrentPassword] = useState(false);
@@ -81,6 +143,7 @@ export default function ProfileScreen({
   // Validation functions
   const validateEmail = (email) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
   const validateName = (name) => name.trim().length >= 2;
+  const validateFullNameLength = (name) => name.trim().length <= 20;
   const validatePhone = (phoneNumber) => {
     const cleaned = phoneNumber.replace(/\D/g, "");
     return cleaned.length >= 10 && cleaned.length <= 15;
@@ -92,7 +155,7 @@ export default function ProfileScreen({
   const handleNameChange = useCallback(
     (text) => {
       setProfileName(text);
-      if (errors.name && validateName(text)) {
+      if (errors.name && validateName(text) && validateFullNameLength(text)) {
         setErrors((prev) => ({ ...prev, name: null }));
       }
     },
@@ -151,14 +214,16 @@ export default function ProfileScreen({
 
     try {
       const result = await ImagePicker.launchCameraAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        mediaTypes: ["images"],
         allowsEditing: true,
         aspect: [1, 1],
         quality: 0.8,
       });
 
       if (!result.canceled && result.assets?.[0]) {
-        setProfileImage(result.assets[0].uri);
+        const imageUri = result.assets[0].uri;
+        setProfileImage(imageUri);
+        await saveProfileImage(imageUri);
       }
     } catch (error) {
       Alert.alert("Error", "Unable to access camera. Please try again.");
@@ -170,14 +235,16 @@ export default function ProfileScreen({
 
     try {
       const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        mediaTypes: ["images"],
         allowsEditing: true,
         aspect: [1, 1],
         quality: 0.8,
       });
 
       if (!result.canceled && result.assets?.[0]) {
-        setProfileImage(result.assets[0].uri);
+        const imageUri = result.assets[0].uri;
+        setProfileImage(imageUri);
+        await saveProfileImage(imageUri);
       }
     } catch (error) {
       Alert.alert("Error", "Unable to access photo library. Please try again.");
@@ -200,7 +267,10 @@ export default function ProfileScreen({
         (buttonIndex) => {
           if (buttonIndex === 1) launchCamera();
           else if (buttonIndex === 2) pickImage();
-          else if (buttonIndex === 3) setProfileImage(null);
+          else if (buttonIndex === 3) {
+            setProfileImage(null);
+            saveProfileImage(null);
+          }
         }
       );
     } else {
@@ -213,7 +283,10 @@ export default function ProfileScreen({
       if (profileImage) {
         options.push({
           text: "Remove Photo",
-          onPress: () => setProfileImage(null),
+          onPress: async () => {
+            setProfileImage(null);
+            await saveProfileImage(null);
+          },
           style: "destructive",
         });
       }
@@ -221,6 +294,40 @@ export default function ProfileScreen({
       Alert.alert("Profile Picture", "Choose an option:", options);
     }
   }, [profileImage]);
+
+  const saveProfileImage = async (imageUri) => {
+    try {
+      // For UI testing - just save to local state
+      setProfileImage(imageUri);
+    } catch (error) {
+      // Error handled silently
+    }
+  };
+
+  // Sign in handler for UI testing
+  const handleSignIn = useCallback(async () => {
+    try {
+      setIsLoading(true);
+      // For UI testing - simulate sign in
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+
+      // Mock user data for UI testing
+      const mockUser = {
+        id: "test_user_123",
+        name: profileName || "Test User",
+        email: profileEmail || "test@example.com",
+        phone: phone || "+1-555-0123",
+        profileImage: profileImage,
+      };
+
+      setCurrentUser(mockUser);
+      Alert.alert("Success", "Signed in successfully!");
+    } catch (error) {
+      Alert.alert("Error", "Failed to sign in. Please try again.");
+    } finally {
+      setIsLoading(false);
+    }
+  }, [profileName, profileEmail, phone, profileImage]);
 
   // Two-factor authentication handler
   const handleTwoFactorToggle = useCallback((value) => {
@@ -259,11 +366,12 @@ export default function ProfileScreen({
   }, []);
 
   // Password change handler
-  const handlePasswordChange = useCallback(() => {
+  const handlePasswordChange = useCallback(async () => {
     const newErrors = {};
 
-    if (!currentPassword)
+    if (!currentPassword) {
       newErrors.currentPassword = "Current password is required";
+    }
     if (!validatePassword(newPassword)) {
       newErrors.newPassword =
         "Password must be 8+ characters with uppercase, lowercase, and number";
@@ -275,42 +383,55 @@ export default function ProfileScreen({
     setErrors(newErrors);
 
     if (Object.keys(newErrors).length === 0) {
-      Alert.alert("Success", "Password updated successfully!");
-      setCurrentPassword("");
-      setNewPassword("");
-      setConfirmPassword("");
-      setShowPasswordSection(false);
+      setIsLoading(true);
+      try {
+        // For UI testing - simulate password update
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+
+        setCurrentPassword("");
+        setNewPassword("");
+        setConfirmPassword("");
+        setShowPasswordSection(false);
+        Alert.alert("Success", "Password updated successfully!");
+        goBack();
+      } catch (error) {
+        Alert.alert("Error", "Failed to update password. Please try again.");
+      } finally {
+        setIsLoading(false);
+      }
     }
   }, [currentPassword, newPassword, confirmPassword]);
 
-  // Authentication handlers
-  const handleSignOut = useCallback(() => {
+  // Authentication handlers - UI only for now
+  const handleSignOut = useCallback(async () => {
     Alert.alert("Sign Out", "Are you sure you want to sign out?", [
       { text: "Cancel", style: "cancel" },
       {
         text: "Sign Out",
         style: "destructive",
-        onPress: () => {
-          setIsSignedIn(false);
-          Alert.alert("Signed Out", "You have been successfully signed out.");
+        onPress: async () => {
+          try {
+            setIsLoading(true);
+            // For UI testing - simulate sign out
+            await new Promise((resolve) => setTimeout(resolve, 1000));
+            setCurrentUser(null);
+            Alert.alert("Signed Out", "You have been signed out successfully.");
+            // Reset all profile states
+            setProfileName("");
+            setProfileEmail("");
+            setPhone("");
+            setProfileImage(null);
+          } catch (error) {
+            Alert.alert("Error", "Failed to sign out. Please try again.");
+          } finally {
+            setIsLoading(false);
+          }
         },
       },
     ]);
   }, []);
 
-  const handleSignIn = useCallback(() => {
-    Alert.alert("Sign In", "Redirecting to sign in page...", [
-      {
-        text: "OK",
-        onPress: () => {
-          setIsSignedIn(true);
-          Alert.alert("Welcome Back!", "You have been successfully signed in.");
-        },
-      },
-    ]);
-  }, []);
-
-  const handleDeleteAccount = useCallback(() => {
+  const handleDeleteAccount = useCallback(async () => {
     Alert.alert(
       "Delete Account",
       "This action cannot be undone. All your data will be permanently deleted.",
@@ -319,20 +440,28 @@ export default function ProfileScreen({
         {
           text: "Delete",
           style: "destructive",
-          onPress: () => {
-            Alert.alert(
-              "Account Deleted",
-              "Your account has been permanently deleted.",
-              [
-                {
-                  text: "OK",
-                  onPress: () => {
-                    // Here you would typically navigate to login screen
-                    setIsSignedIn(false);
-                  },
-                },
-              ]
-            );
+          onPress: async () => {
+            try {
+              setIsLoading(true);
+              // For UI testing - simulate account deletion
+              await new Promise((resolve) => setTimeout(resolve, 1000));
+              setCurrentUser(null);
+              Alert.alert(
+                "Account Deleted",
+                "Your account has been permanently deleted.",
+                [{ text: "OK" }]
+              );
+              // Reset all profile states
+              setProfileName("");
+              setProfileEmail("");
+              setPhone("");
+              setProfileImage(null);
+              setErrors({});
+            } catch (error) {
+              Alert.alert("Error", "An unexpected error occurred.");
+            } finally {
+              setIsLoading(false);
+            }
           },
         },
       ]
@@ -393,17 +522,20 @@ export default function ProfileScreen({
     );
   }, []);
 
-  // Form validation and save
+  // Form validation and save - now using UserManager
   const validateForm = useCallback(() => {
     const newErrors = {};
 
     if (!validateName(profileName)) {
       newErrors.name = "Name must be at least 2 characters";
+    } else if (!validateFullNameLength(profileName)) {
+      newErrors.name = "Name must be at most 20 characters";
     }
     if (!validateEmail(profileEmail)) {
       newErrors.email = "Please enter a valid email address";
     }
-    if (!phone) {
+    // Phone is mandatory
+    if (!phone || !phone.trim()) {
       newErrors.phone = "Phone number is required";
     } else if (!validatePhone(phone)) {
       newErrors.phone = "Please enter a valid phone number";
@@ -422,15 +554,62 @@ export default function ProfileScreen({
     setIsLoading(true);
 
     try {
+      // For UI testing - simulate profile save
       await new Promise((resolve) => setTimeout(resolve, 1000));
+
+      // Update parent component states
+      setProfileName(profileName.trim());
+      setProfileEmail(profileEmail.trim().toLowerCase());
+      setProfilePhone(phone.trim());
+
+      // Update local currentUser state if exists
+      if (currentUser) {
+        setCurrentUser({
+          ...currentUser,
+          name: profileName.trim(),
+          email: profileEmail.trim().toLowerCase(),
+          phone: phone.trim(),
+          profileImage: profileImage,
+        });
+      }
+
       Alert.alert("Success", "Profile updated successfully!");
+      goBack();
     } catch (error) {
       Alert.alert("Error", "Failed to update profile. Please try again.");
     } finally {
       setIsLoading(false);
     }
-  }, [validateForm]);
+  }, [
+    validateForm,
+    profileName,
+    profileEmail,
+    phone,
+    profileImage,
+    currentUser,
+    setProfileName,
+    setProfileEmail,
+    setProfilePhone,
+  ]);
 
+  // Settings handlers
+  const updateUserSetting = useCallback(
+    async (setting, value) => {
+      try {
+        const newSettings = { ...userSettings, [setting]: value };
+        setUserSettings(newSettings);
+
+        // For UI testing - just update local state
+      } catch (error) {
+        // Error handled silently
+        // Revert the local state if save failed
+        setUserSettings(userSettings);
+      }
+    },
+    [userSettings]
+  );
+
+  // Performance optimization: memoize expensive calculations
   const getDisplayCountryCode = useCallback(() => {
     return countryCodeValue?.includes("-")
       ? countryCodeValue.split("-")[0]
@@ -438,6 +617,9 @@ export default function ProfileScreen({
   }, [countryCodeValue]);
 
   const getInitials = useCallback(() => {
+    if (!profileName || !profileName.trim()) {
+      return "U";
+    }
     const names = profileName.trim().split(" ");
     return (
       names
@@ -448,12 +630,13 @@ export default function ProfileScreen({
   }, [profileName]);
 
   const getWelcomeMessage = useCallback(() => {
+    if (!profileName || !profileName.trim()) {
+      return "Welcome! 👋";
+    }
     const firstName = profileName.trim().split(" ")[0] || "User";
-    const greetings = ["Hello", "Welcome", "Hi there"];
-    const randomGreeting =
-      greetings[Math.floor(Math.random() * greetings.length)];
-    return `${randomGreeting}, ${firstName}! 👋`;
-  }, [profileName]);
+    const emoji = profileEmoji || "👤";
+    return `${emoji} Hello, ${firstName}! 👋`;
+  }, [profileName, profileEmoji]);
 
   // Navigation functions
   const goToPersonal = () => setCurrentTab("personal");
@@ -471,7 +654,9 @@ export default function ProfileScreen({
           Profile Screen
         </Text>
         <Text style={[styles.subtitle, darkMode && styles.darkSubtext]}>
-          Manage your account information
+          {currentUser
+            ? "Manage your account information"
+            : "Please sign in to manage your profile"}
         </Text>
       </View>
 
@@ -480,6 +665,9 @@ export default function ProfileScreen({
         <Pressable
           onPress={handleImagePicker}
           style={styles.profileImageContainer}
+          accessibilityRole="button"
+          accessibilityLabel="Change profile picture"
+          accessibilityHint="Tap to select a new profile picture from camera or gallery"
         >
           {profileImage ? (
             <Image source={{ uri: profileImage }} style={styles.profileImage} />
@@ -514,6 +702,9 @@ export default function ProfileScreen({
         <TouchableOpacity
           style={[styles.menuItem, darkMode && styles.darkMenuitem]}
           onPress={goToPersonal}
+          accessibilityRole="button"
+          accessibilityLabel="Personal Information"
+          accessibilityHint="Tap to edit your name, email, and phone number"
         >
           <View style={styles.menuIconContainer}>
             <Text style={styles.menuIcon}>👤</Text>
@@ -532,6 +723,9 @@ export default function ProfileScreen({
         <TouchableOpacity
           style={[styles.menuItem, darkMode && styles.darkMenuitem]}
           onPress={goToSecurity}
+          accessibilityRole="button"
+          accessibilityLabel="Security & Privacy"
+          accessibilityHint="Tap to change password and security settings"
         >
           <View style={styles.menuIconContainer}>
             <Text style={styles.menuIcon}>🔒</Text>
@@ -550,6 +744,9 @@ export default function ProfileScreen({
         <TouchableOpacity
           style={[styles.menuItem, darkMode && styles.darkMenuitem]}
           onPress={goToNotifications}
+          accessibilityRole="button"
+          accessibilityLabel="Notifications & Preferences"
+          accessibilityHint="Tap to manage notification settings and app preferences"
         >
           <View style={styles.menuIconContainer}>
             <Text style={styles.menuIcon}>🔔</Text>
@@ -559,7 +756,7 @@ export default function ProfileScreen({
               Notifications & Preferences
             </Text>
             <Text style={[styles.menuSubtitle, darkMode && styles.darkSubtext]}>
-              Email, SMS, push notifications, dark mode
+              Email, SMS, push notifications, appearance
             </Text>
           </View>
           <Text style={[styles.chevron, darkMode && styles.darkText]}>›</Text>
@@ -570,6 +767,9 @@ export default function ProfileScreen({
       <TouchableOpacity
         style={[styles.menuItem, darkMode && styles.darkMenuitem]}
         onPress={goToFeedback}
+        accessibilityRole="button"
+        accessibilityLabel="Feedback & Support"
+        accessibilityHint="Tap to rate the app or contact support"
       >
         <View style={styles.menuIconContainer}>
           <Text style={styles.menuIcon}>💬</Text>
@@ -587,19 +787,33 @@ export default function ProfileScreen({
 
       {/* Authentication Section */}
       <View style={styles.authSection}>
-        {isSignedIn ? (
+        {currentUser ? (
           <TouchableOpacity
-            style={[styles.authButton, styles.signOutButton]}
+            style={[
+              styles.authButton,
+              styles.signOutButton,
+              isLoading && styles.saveButtonDisabled,
+            ]}
             onPress={handleSignOut}
+            disabled={isLoading}
           >
-            <Text style={styles.signOutButtonText}>🚪 Sign Out</Text>
+            <Text style={styles.signOutButtonText}>
+              {isLoading ? "Signing Out..." : "🚪 Sign Out"}
+            </Text>
           </TouchableOpacity>
         ) : (
           <TouchableOpacity
-            style={[styles.authButton, styles.signInButton]}
+            style={[
+              styles.authButton,
+              styles.signInButton,
+              isLoading && styles.saveButtonDisabled,
+            ]}
             onPress={handleSignIn}
+            disabled={isLoading}
           >
-            <Text style={styles.signInButtonText}>🔐 Sign In</Text>
+            <Text style={styles.signInButtonText}>
+              {isLoading ? "Signing In..." : "🔑 Sign In"}
+            </Text>
           </TouchableOpacity>
         )}
       </View>
@@ -610,7 +824,13 @@ export default function ProfileScreen({
     <>
       {/* Header with Back Button */}
       <View style={styles.subHeader}>
-        <TouchableOpacity style={styles.backButton} onPress={goBack}>
+        <TouchableOpacity
+          style={styles.backButton}
+          onPress={goBack}
+          accessibilityRole="button"
+          accessibilityLabel="Go back"
+          accessibilityHint="Return to main profile screen"
+        >
           <View style={styles.chevronCircle}>
             <Ionicons
               name="chevron-back-circle-outline"
@@ -620,7 +840,7 @@ export default function ProfileScreen({
             />
           </View>
         </TouchableOpacity>
-        <Text style={[styles.subTitle, darkMode && styles.darksubTitle]}>
+        <Text style={[styles.subTitle, darkMode && styles.darkSubTitle]}>
           Personal Information
         </Text>
       </View>
@@ -694,6 +914,14 @@ export default function ProfileScreen({
               styles.dropdownPlaceholder,
               darkMode && styles.darkText,
             ]}
+            arrowIconStyle={[
+              styles.dropdownArrow,
+              darkMode && styles.darkDropdownArrow,
+            ]}
+            tickIconStyle={[
+              styles.dropdownTick,
+              darkMode && styles.darkDropdownTick,
+            ]}
             placeholder="Select country code"
             searchable={true}
             searchPlaceholder="Search countries..."
@@ -713,8 +941,7 @@ export default function ProfileScreen({
               decelerationRate: "fast",
             }}
             maxHeight={200}
-            itemSeparator={true}
-            itemSeparatorStyle={styles.itemSeparator}
+            itemSeparator={false}
             dropDownDirection="AUTO"
             zIndex={1000}
             zIndexInverse={1000}
@@ -749,11 +976,20 @@ export default function ProfileScreen({
         </View>
 
         <TouchableOpacity
-          style={[styles.saveButton, isLoading && styles.saveButtonDisabled]}
+          style={[
+            styles.saveButton,
+            darkMode && styles.darkSaveButton,
+            isLoading && styles.saveButtonDisabled,
+          ]}
           onPress={handleSaveProfile}
           disabled={isLoading}
         >
-          <Text style={styles.saveButtonText}>
+          <Text
+            style={[
+              styles.saveButtonText,
+              darkMode && styles.darkSaveButtonText,
+            ]}
+          >
             {isLoading ? "Saving..." : "Save Changes"}
           </Text>
         </TouchableOpacity>
@@ -765,7 +1001,13 @@ export default function ProfileScreen({
     <>
       {/* Header with Back Button */}
       <View style={styles.subHeader}>
-        <TouchableOpacity style={styles.backButton} onPress={goBack}>
+        <TouchableOpacity
+          style={styles.backButton}
+          onPress={goBack}
+          accessibilityRole="button"
+          accessibilityLabel="Go back"
+          accessibilityHint="Return to main profile screen"
+        >
           <View style={styles.chevronCircle}>
             <Ionicons
               name="chevron-back-circle-outline"
@@ -775,7 +1017,7 @@ export default function ProfileScreen({
             />
           </View>
         </TouchableOpacity>
-        <Text style={[styles.subTitle, darkMode && styles.darksubTitle]}>
+        <Text style={[styles.subTitle, darkMode && styles.darkSubTitle]}>
           Security & Privacy
         </Text>
       </View>
@@ -944,10 +1186,19 @@ export default function ProfileScreen({
                 style={[
                   styles.passwordButton,
                   darkMode && { backgroundColor: "#D69E2E" },
+                  isLoading && styles.saveButtonDisabled,
                 ]}
                 onPress={handlePasswordChange}
+                disabled={isLoading}
               >
-                <Text style={styles.passwordButtonText}>Update Password</Text>
+                <Text
+                  style={[
+                    styles.passwordButtonText,
+                    darkMode && styles.darkPasswordButtonText,
+                  ]}
+                >
+                  {isLoading ? "Updating..." : "Update Password"}
+                </Text>
               </TouchableOpacity>
             </>
           )}
@@ -960,7 +1211,13 @@ export default function ProfileScreen({
     <>
       {/* Header with Back Button */}
       <View style={styles.subHeader}>
-        <TouchableOpacity style={styles.backButton} onPress={goBack}>
+        <TouchableOpacity
+          style={styles.backButton}
+          onPress={goBack}
+          accessibilityRole="button"
+          accessibilityLabel="Go back"
+          accessibilityHint="Return to main profile screen"
+        >
           <View style={styles.chevronCircle}>
             <Ionicons
               name="chevron-back-circle-outline"
@@ -970,11 +1227,12 @@ export default function ProfileScreen({
             />
           </View>
         </TouchableOpacity>
-        <Text style={[styles.subTitle, darkMode && styles.darksubTitle]}>
+        <Text style={[styles.subTitle, darkMode && styles.darkSubTitle]}>
           Notifications & Preferences
         </Text>
       </View>
 
+      {/* Notifications Container */}
       <View
         style={[styles.formContainer, darkMode && styles.darkFormContainer]}
       >
@@ -993,8 +1251,10 @@ export default function ProfileScreen({
             </Text>
           </View>
           <Switch
-            value={emailNotifications}
-            onValueChange={setEmailNotifications}
+            value={userSettings.emailNotifications}
+            onValueChange={(value) =>
+              updateUserSetting("emailNotifications", value)
+            }
             trackColor={{
               false: "#ddd",
               true: darkMode ? "#D69E2E" : "#8B4513",
@@ -1018,8 +1278,10 @@ export default function ProfileScreen({
             </Text>
           </View>
           <Switch
-            value={smsNotifications}
-            onValueChange={setSmsNotifications}
+            value={userSettings.smsNotifications}
+            onValueChange={(value) =>
+              updateUserSetting("smsNotifications", value)
+            }
             trackColor={{
               false: "#ddd",
               true: darkMode ? "#D69E2E" : "#8B4513",
@@ -1043,8 +1305,10 @@ export default function ProfileScreen({
             </Text>
           </View>
           <Switch
-            value={pushNotifications}
-            onValueChange={setPushNotifications}
+            value={userSettings.pushNotifications}
+            onValueChange={(value) =>
+              updateUserSetting("pushNotifications", value)
+            }
             trackColor={{
               false: "#ddd",
               true: darkMode ? "#D69E2E" : "#8B4513",
@@ -1052,7 +1316,16 @@ export default function ProfileScreen({
             thumbColor="#fff"
           />
         </View>
+      </View>
 
+      {/* Appearance Settings Container */}
+      <View
+        style={[
+          styles.formContainer,
+          darkMode && styles.darkFormContainer,
+          { marginTop: 20 },
+        ]}
+      >
         <View style={styles.preferenceRow}>
           <View style={styles.preferenceInfo}>
             <Text style={[styles.preferenceTitle, darkMode && styles.darkText]}>
@@ -1077,6 +1350,31 @@ export default function ProfileScreen({
             thumbColor="#fff"
           />
         </View>
+
+        <View style={styles.preferenceRow}>
+          <View style={styles.preferenceInfo}>
+            <Text style={[styles.preferenceTitle, darkMode && styles.darkText]}>
+              Liquid Glass Mode
+            </Text>
+            <Text
+              style={[
+                styles.preferenceSubtitle,
+                darkMode && styles.darkSubtext,
+              ]}
+            >
+              Modern frosted glass interface design
+            </Text>
+          </View>
+          <Switch
+            value={liquidGlassMode}
+            onValueChange={setLiquidGlassMode}
+            trackColor={{
+              false: "#ddd",
+              true: darkMode ? "#D69E2E" : "#8B4513",
+            }}
+            thumbColor="#fff"
+          />
+        </View>
       </View>
     </>
   );
@@ -1085,7 +1383,13 @@ export default function ProfileScreen({
     <>
       {/* Header with Back Button */}
       <View style={styles.subHeader}>
-        <TouchableOpacity style={styles.backButton} onPress={goBack}>
+        <TouchableOpacity
+          style={styles.backButton}
+          onPress={goBack}
+          accessibilityRole="button"
+          accessibilityLabel="Go back"
+          accessibilityHint="Return to main profile screen"
+        >
           <View style={styles.chevronCircle}>
             <Ionicons
               name="chevron-back-circle-outline"
@@ -1095,7 +1399,7 @@ export default function ProfileScreen({
             />
           </View>
         </TouchableOpacity>
-        <Text style={[styles.subTitle, darkMode && styles.darksubTitle]}>
+        <Text style={[styles.subTitle, darkMode && styles.darkSubTitle]}>
           Feedback & Support
         </Text>
       </View>
@@ -1229,13 +1533,20 @@ export default function ProfileScreen({
 
   return (
     <SafeAreaView style={[styles.container, darkMode && styles.darkContainer]}>
+      <StatusBar
+        barStyle={darkMode ? "light-content" : "dark-content"}
+        backgroundColor={darkMode ? "#1A202C" : "#EFE4D2"}
+      />
       <KeyboardAvoidingView
         behavior={Platform.OS === "ios" ? "padding" : "height"}
         style={styles.keyboardAvoid}
       >
         <ScrollView
           style={styles.scrollView}
-          contentContainerStyle={styles.scrollContent}
+          contentContainerStyle={[
+            styles.scrollContent,
+            { paddingBottom: navigationSpacing },
+          ]}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
           nestedScrollEnabled={true}
@@ -1266,14 +1577,15 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
-    padding: 20,
+    paddingHorizontal: 20,
+    paddingTop: 10,
     paddingBottom: 40,
   },
 
   // Header
   header: {
     alignItems: "center",
-    marginBottom: 30,
+    marginBottom: 25,
   },
   title: {
     fontSize: 28,
@@ -1329,7 +1641,7 @@ const styles = StyleSheet.create({
     textAlign: "center",
     flex: 1,
   },
-  darksubTitle: {
+  darkSubTitle: {
     color: "#D69E2E", // Gold color for dark mode
   },
 
@@ -1358,7 +1670,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     borderWidth: 3,
-    bottom: 10,
+    bottom: 8,
     borderColor: "#fff",
   },
   darkPlaceholder: {
@@ -1372,16 +1684,15 @@ const styles = StyleSheet.create({
   },
   cameraIcon: {
     position: "absolute",
-    bottom: 2,
-    right: 2,
+    bottom: 5,
+    right: 5,
     width: 32,
     height: 32,
-    borderRadius: 40,
+    borderRadius: 16,
     backgroundColor: "#8B4513",
     justifyContent: "center",
     alignItems: "center",
     borderWidth: 2,
-    bottom: 20,
     borderColor: "#fff",
   },
   cameraEmoji: {
@@ -1507,7 +1818,7 @@ const styles = StyleSheet.create({
   countryCodeDisplay: {
     fontSize: 16,
     fontWeight: "600",
-    color: "#8B4513",
+    color: "#374151",
     paddingLeft: 16,
     paddingRight: 12,
     borderRightWidth: 1,
@@ -1577,9 +1888,19 @@ const styles = StyleSheet.create({
     backgroundColor: "#2D3748",
     borderBottomColor: "#4A5568",
   },
-  itemSeparator: {
-    height: 1,
-    backgroundColor: "#E5E7EB",
+
+  // Dropdown arrows and ticks
+  dropdownArrow: {
+    tintColor: "#8B4513",
+  },
+  darkDropdownArrow: {
+    tintColor: "#D69E2E",
+  },
+  dropdownTick: {
+    tintColor: "#8B4513",
+  },
+  darkDropdownTick: {
+    tintColor: "#D69E2E",
   },
 
   // Password Section
@@ -1627,8 +1948,11 @@ const styles = StyleSheet.create({
   },
   passwordButtonText: {
     color: "#fff",
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: "600",
+  },
+  darkPasswordButtonText: {
+    color: "#fff",
   },
 
   // Preferences
@@ -1657,17 +1981,21 @@ const styles = StyleSheet.create({
 
   // Save Button
   saveButton: {
-    backgroundColor: "#10B981",
+    backgroundColor: "#8B4513", // Brown theme for consistency
     borderRadius: 12,
-    paddingVertical: 18,
+    paddingVertical: 15,
     alignItems: "center",
     marginTop: 20,
-    shadowColor: "#10B981",
+    shadowColor: "#8B4513",
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 8,
     elevation: 6,
     bottom: 10,
+  },
+  darkSaveButton: {
+    backgroundColor: "#D69E2E", // Gold theme for dark mode
+    shadowColor: "#D69E2E",
   },
   saveButtonDisabled: {
     backgroundColor: "#9CA3AF",
@@ -1675,9 +2003,12 @@ const styles = StyleSheet.create({
   },
   saveButtonText: {
     color: "#fff",
-    fontWeight: "700",
+    fontWeight: "600",
     fontSize: 18,
     letterSpacing: 0.5,
+  },
+  darkSaveButtonText: {
+    color: "#fff", // Keep white text for readability on gold background
   },
 
   // Authentication Buttons
@@ -1695,12 +2026,12 @@ const styles = StyleSheet.create({
     elevation: 6,
   },
   signInButton: {
-    backgroundColor: "#2356A8",
-    bottom: 40,
+    backgroundColor: "#007AFF",
+    bottom: 45,
   },
   signOutButton: {
     backgroundColor: "#EF4444",
-    bottom: 40,
+    bottom: 45,
   },
   signInButtonText: {
     color: "#fff",
@@ -1731,18 +2062,12 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: "#8B4513",
     marginBottom: 20,
-    marginTop: -15,
+    marginTop: -20,
     marginLeft: 10,
     textAlign: "center",
   },
   darkWelcomeMessage: {
     color: "#D69E2E", // Gold color for welcome message in dark mode
-    fontSize: 20,
-    fontWeight: "600",
-    marginBottom: 20,
-    marginTop: -15,
-    marginLeft: 10,
-    textAlign: "center",
   },
 
   // Feedback Options
@@ -1800,4 +2125,93 @@ const styles = StyleSheet.create({
     fontSize: 18,
     letterSpacing: 0.5,
   },
+
+  // Delete button styles for main screen
+  deleteButton: {
+    backgroundColor: "#EF4444",
+    marginTop: 8,
+  },
+  deleteButtonText: {
+    color: "#fff",
+    fontWeight: "600",
+    fontSize: 16,
+  },
 });
+
+// PropTypes for type safety
+ProfileScreen.propTypes = {
+  profileName: PropTypes.string.isRequired,
+  setProfileName: PropTypes.func.isRequired,
+  profileEmoji: PropTypes.string,
+  setProfileEmoji: PropTypes.func.isRequired,
+  profileEmail: PropTypes.string.isRequired,
+  setProfileEmail: PropTypes.func.isRequired,
+  profilePhone: PropTypes.string,
+  setProfilePhone: PropTypes.func.isRequired,
+  darkMode: PropTypes.bool.isRequired,
+  setDarkMode: PropTypes.func.isRequired,
+  liquidGlassMode: PropTypes.bool.isRequired,
+  setLiquidGlassMode: PropTypes.func.isRequired,
+  onTabPress: PropTypes.func,
+};
+
+// Default props
+ProfileScreen.defaultProps = {
+  profilePhone: "",
+  onTabPress: null,
+};
+
+// Error Boundary Component for crash protection
+class ProfileErrorBoundary extends Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch() {
+    // Error caught and handled silently
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <View
+          style={{
+            flex: 1,
+            justifyContent: "center",
+            alignItems: "center",
+            padding: 20,
+          }}
+        >
+          <Text style={{ fontSize: 18, fontWeight: "bold", marginBottom: 10 }}>
+            Oops! Something went wrong
+          </Text>
+          <Text style={{ textAlign: "center", color: "#666" }}>
+            We're sorry, but there was an error loading your profile. Please
+            restart the app.
+          </Text>
+        </View>
+      );
+    }
+
+    return this.props.children;
+  }
+}
+
+ProfileErrorBoundary.propTypes = {
+  children: PropTypes.node.isRequired,
+};
+
+// Wrapped ProfileScreen with Error Boundary
+const ProfileScreenWithErrorBoundary = (props) => (
+  <ProfileErrorBoundary>
+    <ProfileScreen {...props} />
+  </ProfileErrorBoundary>
+);
+
+export { ProfileErrorBoundary };
+export default ProfileScreenWithErrorBoundary;

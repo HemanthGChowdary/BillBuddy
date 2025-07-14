@@ -1,4 +1,5 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
+import { useFocusEffect } from "@react-navigation/native";
 import {
   View,
   Text,
@@ -11,9 +12,12 @@ import {
   Alert,
   TouchableWithoutFeedback,
   Keyboard,
+  ActivityIndicator,
+  StatusBar,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
-import { getCurrencySymbol } from "../utils/helpers";
+import { getCurrencySymbol, validateNoteWordCount } from "../utils/helpers";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
 export default function FriendDetailScreen({
@@ -23,52 +27,108 @@ export default function FriendDetailScreen({
   profileName,
   profileEmoji,
   friends,
-  darkMode = false, // Add darkMode prop
+  darkMode = false,
 }) {
+  const insets = useSafeAreaInsets();
+  const navigationSpacing = Math.max(insets.bottom, 20) + 10 + 30;
   const { friendName } = route.params;
   const [showSettleModal, setShowSettleModal] = useState(false);
   const [settleAmount, setSettleAmount] = useState("");
   const [settleNote, setSettleNote] = useState("");
   const [settlements, setSettlements] = useState([]);
+  const [isLoadingSettlement, setIsLoadingSettlement] = useState(false);
+  const [allSettlements, setAllSettlements] = useState({});
 
-  const currentUser = profileName?.trim();
-  const isOwnProfile = friendName === currentUser;
+  const currentUserName = profileName?.trim();
+  const isOwnProfile = friendName === currentUserName;
 
-  // Load settlements on component mount
   useEffect(() => {
     loadSettlements();
   }, [friendName]);
 
+  useFocusEffect(
+    useCallback(() => {
+      loadSettlements();
+    }, [friendName])
+  );
+
   const loadSettlements = async () => {
     try {
-      const saved = await AsyncStorage.getItem(`settlements_${friendName}`);
+      const userA = currentUserName < friendName ? currentUserName : friendName;
+      const userB = currentUserName < friendName ? friendName : currentUserName;
+      const settlementKey = `settlements_${userA}_${userB}`;
+
+      const saved = await AsyncStorage.getItem(settlementKey);
       if (saved) {
-        setSettlements(JSON.parse(saved));
+        const userFriendSettlements = JSON.parse(saved);
+        userFriendSettlements.sort(
+          (a, b) => new Date(b.date) - new Date(a.date)
+        );
+        setSettlements(userFriendSettlements);
       }
+
+      const allKeys = await AsyncStorage.getAllKeys();
+      const settlementKeys = allKeys.filter((key) =>
+        key.startsWith("settlements_")
+      );
+      const allSettlementsData = {};
+
+      for (const key of settlementKeys) {
+        try {
+          const data = await AsyncStorage.getItem(key);
+          if (data) {
+            const keyParts = key.replace("settlements_", "").split("_");
+            const [userA, userB] = keyParts;
+            const settlements = JSON.parse(data);
+
+            if (!allSettlementsData[userA]) allSettlementsData[userA] = {};
+            if (!allSettlementsData[userB]) allSettlementsData[userB] = {};
+
+            allSettlementsData[userA][userB] = settlements;
+            allSettlementsData[userB][userA] = settlements;
+          }
+        } catch (error) {
+          console.error(`Failed to load settlement key ${key}:`, error);
+        }
+      }
+
+      setAllSettlements(allSettlementsData);
     } catch (error) {
       console.error("Failed to load settlements:", error);
     }
   };
 
   const saveSettlement = async (newSettlement) => {
+    const previousSettlements = [...settlements];
     try {
       const updatedSettlements = [newSettlement, ...settlements];
       setSettlements(updatedSettlements);
+
+      const userA = currentUserName < friendName ? currentUserName : friendName;
+      const userB = currentUserName < friendName ? friendName : currentUserName;
+      const settlementKey = `settlements_${userA}_${userB}`;
+
       await AsyncStorage.setItem(
-        `settlements_${friendName}`,
+        settlementKey,
         JSON.stringify(updatedSettlements)
       );
     } catch (error) {
       console.error("Failed to save settlement:", error);
+      setSettlements(previousSettlements);
+      Alert.alert(
+        "Settlement Save Failed",
+        "Unable to save settlement. Please check your device storage and try again.",
+        [{ text: "OK" }]
+      );
+      throw error;
     }
   };
 
   const [youOweFriend, setYouOweFriend] = useState(0);
   const [friendOwesYou, setFriendOwesYou] = useState(0);
-  const [friendOwesOthers, setFriendOwesOthers] = useState(0); // New state for friend owing others
-  const [othersOweFriend, setOthersOweFriend] = useState(0); // New state for others owing friend
+  const [friendOwesOthers, setFriendOwesOthers] = useState(0);
+  const [othersOweFriend, setOthersOweFriend] = useState(0);
   const [currency, setCurrency] = useState("USD");
-
   const [
     friendNetBalanceWithSpecificOthers,
     setFriendNetBalanceWithSpecificOthers,
@@ -80,106 +140,315 @@ export default function FriendDetailScreen({
     let totalFriendOwesOthers = 0;
     let totalOthersOweFriend = 0;
 
-    // A temporary map to track the net balance of 'friendName' with each 'other' person.
-    // Positive value means 'other' owes 'friendName'.
-    // Negative value means 'friendName' owes 'other'.
     const friendNetBalanceWithSpecificOthers = {};
 
     bills.forEach((bill) => {
       const { payer, splitWith = [], currency: billCurrency } = bill;
 
-      // Skip bills where friendName is not involved
       const isFriendInvolved =
         payer === friendName || splitWith.includes(friendName);
       if (!isFriendInvolved) return;
 
-      // Set currency based on first matching bill
       if (billCurrency && currency !== billCurrency) {
         setCurrency(billCurrency);
       }
 
-      const totalAmount = parseFloat(bill.amount);
-      const numParticipants = splitWith.length;
-      const share = numParticipants > 0 ? totalAmount / numParticipants : 0;
+      const totalAmount = Math.round(parseFloat(bill.amount) * 100) / 100;
+      const splitType = bill.splitType || "equal";
+      const splitAmounts = bill.splitAmounts || {};
 
-      // --- Calculate You vs. Friend (Existing Logic) ---
-      if (payer === currentUser) {
-        if (splitWith.includes(friendName) && friendName !== currentUser) {
-          currentFriendOwesYou += share; // Friend owes you
-        }
-      } else if (payer === friendName) {
-        if (splitWith.includes(currentUser) && currentUser !== friendName) {
-          currentYouOweFriend += share; // You owe friend
+      let individualAmounts = {};
+
+      if (splitType === "exact" && splitAmounts) {
+        individualAmounts = splitAmounts;
+      } else if (splitType === "percentage" && splitAmounts) {
+        splitWith.forEach((person) => {
+          const percentage = splitAmounts[person] || 0;
+          individualAmounts[person] =
+            Math.round(((totalAmount * percentage) / 100) * 100) / 100;
+        });
+      } else {
+        const perPersonAmount =
+          splitWith.length > 0
+            ? Math.round((totalAmount / splitWith.length) * 100) / 100
+            : 0;
+        splitWith.forEach((person) => {
+          individualAmounts[person] = perPersonAmount;
+        });
+      }
+
+      // Calculate You vs. Friend (For non-own profile only)
+      if (!isOwnProfile) {
+        if (payer === currentUserName) {
+          if (
+            splitWith.includes(friendName) &&
+            friendName !== currentUserName
+          ) {
+            currentFriendOwesYou += individualAmounts[friendName] || 0;
+          }
+        } else if (payer === friendName) {
+          if (
+            splitWith.includes(currentUserName) &&
+            currentUserName !== friendName
+          ) {
+            currentYouOweFriend += individualAmounts[currentUserName] || 0;
+          }
         }
       }
 
-      // --- Calculate Friend vs. Others ---
-      // We are looking for bills where the selected friend (friendName)
-      // interacts financially with anyone *other* than 'currentUser' or 'friendName' themselves.
-
+      // Calculate Friend vs. Others
       splitWith.forEach((participant) => {
-        // Skip current user and the friend being detailed, as their balances are separate.
-        if (participant === currentUser || participant === friendName) {
+        if (participant === currentUserName || participant === friendName) {
           return;
         }
 
-        // If the selected friend (friendName) paid the bill, and 'participant' is in the split
         if (payer === friendName) {
-          // This 'participant' (an 'other') owes 'friendName'
           friendNetBalanceWithSpecificOthers[participant] =
-            (friendNetBalanceWithSpecificOthers[participant] || 0) + share;
-        }
-        // If 'participant' (an 'other') paid the bill, and the selected friend (friendName) is in the split
-        else if (payer === participant) {
-          // 'friendName' owes this 'participant' (an 'other')
+            (friendNetBalanceWithSpecificOthers[participant] || 0) +
+            (individualAmounts[participant] || 0);
+        } else if (payer === participant) {
           friendNetBalanceWithSpecificOthers[participant] =
-            (friendNetBalanceWithSpecificOthers[participant] || 0) - share;
+            (friendNetBalanceWithSpecificOthers[participant] || 0) -
+            (individualAmounts[friendName] || 0);
         }
-        // If a third, completely different person paid (neither friendName nor participant)
-        // and both friendName and participant are in the split, their debt is to the payer.
-        // This specific transaction doesn't create a direct debt between friendName and 'participant'
-        // that needs to be settled on this summary.
       });
     });
-
-    // Netting for You vs. Friend
-    if (currentYouOweFriend > currentFriendOwesYou) {
-      setYouOweFriend(currentYouOweFriend - currentFriendOwesYou);
-      setFriendOwesYou(0);
-    } else {
-      setFriendOwesYou(currentFriendOwesYou - currentYouOweFriend);
-      setYouOweFriend(0);
-    }
 
     // Aggregate Friend vs. Others
     for (const otherPerson in friendNetBalanceWithSpecificOthers) {
       const netAmount = friendNetBalanceWithSpecificOthers[otherPerson];
       if (netAmount < 0) {
-        // friendName owes this other person
         totalFriendOwesOthers += Math.abs(netAmount);
       } else if (netAmount > 0) {
-        // This other person owes friendName
         totalOthersOweFriend += netAmount;
       }
     }
 
+    // FIXED: For own profile, use the Other Balances values for Balance Overview
+    if (isOwnProfile) {
+      currentYouOweFriend = totalFriendOwesOthers;
+      currentFriendOwesYou = totalOthersOweFriend;
+    }
+
+    // Check if there are any bills involving this friend and current user
+    const hasValidBillsWithFriend = bills.some((bill) => {
+      const isCurrentUserInvolved =
+        bill.payer === currentUserName ||
+        (bill.splitWith && bill.splitWith.includes(currentUserName));
+      const isFriendInvolved =
+        bill.payer === friendName ||
+        (bill.splitWith && bill.splitWith.includes(friendName));
+      return isCurrentUserInvolved && isFriendInvolved;
+    });
+
+    // Apply settlements to reduce balances - only if there are valid bills
+    if (hasValidBillsWithFriend && !isOwnProfile) {
+      const billDates = bills
+        .filter((bill) => {
+          const isCurrentUserInvolved =
+            bill.payer === currentUserName ||
+            (bill.splitWith && bill.splitWith.includes(currentUserName));
+          const isFriendInvolved =
+            bill.payer === friendName ||
+            (bill.splitWith && bill.splitWith.includes(friendName));
+          return isCurrentUserInvolved && isFriendInvolved;
+        })
+        .map((bill) => new Date(bill.date || 0));
+
+      const firstBillDate =
+        billDates.length > 0 ? Math.min(...billDates) : new Date();
+
+      const validSettlements = settlements.filter((settlement) => {
+        const settlementDate = new Date(settlement.date);
+        return settlementDate >= firstBillDate;
+      });
+
+      validSettlements.forEach((settlement) => {
+        const settleAmount =
+          Math.round(parseFloat(settlement.amount) * 100) / 100;
+        const direction = settlement.direction;
+
+        if (
+          direction === "user_to_friend" ||
+          (!direction && settlement.payerName === currentUserName)
+        ) {
+          if (currentYouOweFriend >= settleAmount) {
+            currentYouOweFriend -= settleAmount;
+          } else {
+            const remaining = settleAmount - currentYouOweFriend;
+            currentYouOweFriend = 0;
+            currentFriendOwesYou += remaining;
+          }
+        } else if (
+          direction === "friend_to_user" ||
+          (!direction && settlement.payerName === friendName)
+        ) {
+          if (currentFriendOwesYou >= settleAmount) {
+            currentFriendOwesYou -= settleAmount;
+          } else {
+            const remaining = settleAmount - currentFriendOwesYou;
+            currentFriendOwesYou = 0;
+            currentYouOweFriend += remaining;
+          }
+        }
+      });
+    } else if (!hasValidBillsWithFriend && !isOwnProfile) {
+      currentYouOweFriend = 0;
+      currentFriendOwesYou = 0;
+    }
+
+    // Final calculation with proper rounding
+    if (isOwnProfile) {
+      setYouOweFriend(Math.round(currentYouOweFriend * 100) / 100);
+      setFriendOwesYou(Math.round(currentFriendOwesYou * 100) / 100);
+    } else {
+      const netYouOwe =
+        Math.round((currentYouOweFriend - currentFriendOwesYou) * 100) / 100;
+      const netFriendOwes =
+        Math.round((currentFriendOwesYou - currentYouOweFriend) * 100) / 100;
+
+      if (netYouOwe > 0) {
+        setYouOweFriend(netYouOwe);
+        setFriendOwesYou(0);
+      } else if (netFriendOwes > 0) {
+        setFriendOwesYou(netFriendOwes);
+        setYouOweFriend(0);
+      } else {
+        setYouOweFriend(0);
+        setFriendOwesYou(0);
+      }
+    }
+
+    // Apply settlements to "Other Balances" between friend and other users
+    const adjustedFriendNetBalanceWithSpecificOthers = {
+      ...friendNetBalanceWithSpecificOthers,
+    };
+
+    for (const otherPerson in adjustedFriendNetBalanceWithSpecificOthers) {
+      const settlementsWithOther =
+        allSettlements[friendName]?.[otherPerson] || [];
+
+      const billDatesWithOther = bills
+        .filter((bill) => {
+          const isFriendInvolved =
+            bill.payer === friendName ||
+            (bill.splitWith && bill.splitWith.includes(friendName));
+          const isOtherInvolved =
+            bill.payer === otherPerson ||
+            (bill.splitWith && bill.splitWith.includes(otherPerson));
+          return isFriendInvolved && isOtherInvolved;
+        })
+        .map((bill) => new Date(bill.date || 0));
+
+      if (billDatesWithOther.length === 0) {
+        adjustedFriendNetBalanceWithSpecificOthers[otherPerson] = 0;
+        continue;
+      }
+
+      const firstBillDateWithOther = Math.min(...billDatesWithOther);
+
+      const validSettlementsWithOther = settlementsWithOther.filter(
+        (settlement) => {
+          const settlementDate = new Date(settlement.date);
+          return settlementDate >= firstBillDateWithOther;
+        }
+      );
+
+      validSettlementsWithOther.forEach((settlement) => {
+        const settleAmount =
+          Math.round(parseFloat(settlement.amount) * 100) / 100;
+        const direction = settlement.direction;
+        const payerName = settlement.payerName;
+
+        if (
+          direction === "user_to_friend" ||
+          direction === "friend_to_user" ||
+          payerName === friendName ||
+          payerName === otherPerson
+        ) {
+          let currentBalance =
+            adjustedFriendNetBalanceWithSpecificOthers[otherPerson];
+
+          if (payerName === friendName) {
+            if (currentBalance < 0) {
+              const newBalance = currentBalance + settleAmount;
+              adjustedFriendNetBalanceWithSpecificOthers[otherPerson] =
+                newBalance > 0 ? newBalance : 0;
+            } else {
+              adjustedFriendNetBalanceWithSpecificOthers[otherPerson] =
+                currentBalance + settleAmount;
+            }
+          } else if (payerName === otherPerson) {
+            if (currentBalance > 0) {
+              const newBalance = currentBalance - settleAmount;
+              adjustedFriendNetBalanceWithSpecificOthers[otherPerson] =
+                newBalance > 0 ? newBalance : 0;
+            } else {
+              adjustedFriendNetBalanceWithSpecificOthers[otherPerson] =
+                currentBalance - settleAmount;
+            }
+          }
+        }
+      });
+    }
+
+    // Recalculate totals after applying settlements
+    totalFriendOwesOthers = 0;
+    totalOthersOweFriend = 0;
+    for (const otherPerson in adjustedFriendNetBalanceWithSpecificOthers) {
+      const netAmount =
+        Math.round(
+          adjustedFriendNetBalanceWithSpecificOthers[otherPerson] * 100
+        ) / 100;
+      adjustedFriendNetBalanceWithSpecificOthers[otherPerson] = netAmount;
+
+      if (netAmount < 0) {
+        totalFriendOwesOthers += Math.abs(netAmount);
+      } else if (netAmount > 0) {
+        totalOthersOweFriend += netAmount;
+      }
+    }
+
+    totalFriendOwesOthers = Math.round(totalFriendOwesOthers * 100) / 100;
+    totalOthersOweFriend = Math.round(totalOthersOweFriend * 100) / 100;
+
     setFriendOwesOthers(totalFriendOwesOthers);
     setOthersOweFriend(totalOthersOweFriend);
-    setFriendNetBalanceWithSpecificOthers(friendNetBalanceWithSpecificOthers);
-  }, [bills, friendName, currentUser, friends, currency]); // Added 'friends' and 'currency' to dependency array
+    setFriendNetBalanceWithSpecificOthers(
+      adjustedFriendNetBalanceWithSpecificOthers
+    );
+
+    // FIXED: Update Balance Overview to match Other Balances for own profile
+    if (isOwnProfile) {
+      setYouOweFriend(totalFriendOwesOthers);
+      setFriendOwesYou(totalOthersOweFriend);
+    }
+  }, [
+    bills,
+    friendName,
+    currentUserName,
+    friends,
+    currency,
+    settlements,
+    allSettlements,
+  ]);
 
   const currencySymbol = useMemo(() => getCurrencySymbol(currency), [currency]);
 
-  // Get friend emoji - use profileEmoji if viewing own profile
-  const friendData = friends.find((f) => f.name === friendName);
-  const friendEmoji = isOwnProfile
-    ? profileEmoji || "👤"
-    : friendData?.emoji || "👤";
+  const friendEmoji = useMemo(() => {
+    const friendData = friends.find((f) => f.name === friendName);
+    return isOwnProfile ? profileEmoji || "👤" : friendData?.emoji || "👤";
+  }, [isOwnProfile, profileEmoji, friends, friendName]);
 
   const netBalance = friendOwesYou - youOweFriend;
 
   return (
     <SafeAreaView style={[styles.container, darkMode && styles.darkContainer]}>
+      <StatusBar
+        barStyle={darkMode ? "light-content" : "dark-content"}
+        backgroundColor={darkMode ? "#1A202C" : "#EFE4D2"}
+      />
+
       {/* Header */}
       <View style={[styles.header, darkMode && styles.darkHeader]}>
         <View style={styles.headerContent}>
@@ -208,7 +477,6 @@ export default function FriendDetailScreen({
             >
               <Text style={styles.friendEmoji}>{friendEmoji}</Text>
             </View>
-            {/* Status Indicator */}
             <View
               style={{
                 position: "absolute",
@@ -217,7 +485,7 @@ export default function FriendDetailScreen({
                 width: 20,
                 height: 20,
                 borderRadius: 10,
-                backgroundColor: "#4CAF50", // Always online for demo
+                backgroundColor: "#4CAF50",
                 borderWidth: 3,
                 borderColor: darkMode ? "#2D3748" : "#FFFFFF",
                 shadowColor: "#000",
@@ -280,10 +548,10 @@ export default function FriendDetailScreen({
                     ).toFixed(2)}`
                 : netBalance > 0
                 ? `Owes ${
-                    currentUser || "you"
+                    currentUserName || "you"
                   } ${currencySymbol}${netBalance.toFixed(2)}`
                 : netBalance < 0
-                ? `${currentUser || "You"} owes ${currencySymbol}${Math.abs(
+                ? `${currentUserName || "You"} owes ${currencySymbol}${Math.abs(
                     netBalance
                   ).toFixed(2)}`
                 : "Settled up"}
@@ -292,9 +560,70 @@ export default function FriendDetailScreen({
         </View>
       </View>
 
+      {/* Action Buttons in Header */}
+      {!isOwnProfile && (
+        <View
+          style={[
+            styles.headerActionContainer,
+            darkMode && styles.darkHeaderActionContainer,
+          ]}
+        >
+          <TouchableOpacity
+            style={[
+              styles.headerChatButton,
+              darkMode && styles.darkHeaderChatButton,
+              { marginRight: 12 },
+            ]}
+            activeOpacity={0.8}
+            onPress={() => {
+              navigation.navigate("Chat", {
+                friendName: friendName,
+                friendEmoji: friendEmoji,
+                currentUser: profileName,
+              });
+            }}
+          >
+            <Ionicons
+              name="chatbubble"
+              size={18}
+              color="#fff"
+              style={{ marginRight: 6 }}
+            />
+            <Text style={styles.headerChatButtonText}>Chat</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[
+              styles.headerSettleButton,
+              darkMode && styles.darkHeaderSettleButton,
+            ]}
+            activeOpacity={0.8}
+            onPress={() => {
+              if (Math.abs(netBalance) < 0.01) {
+                Alert.alert(
+                  "No Balance to Settle",
+                  `You and ${friendName} are already settled up! There are no outstanding balances to settle.`,
+                  [{ text: "OK", style: "default" }]
+                );
+                return;
+              }
+              setShowSettleModal(true);
+            }}
+          >
+            <Ionicons
+              name="checkmark-circle"
+              size={18}
+              color="#fff"
+              style={{ marginRight: 6 }}
+            />
+            <Text style={styles.headerSettleButtonText}>Settle Up</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
       <ScrollView
         style={styles.scrollContainer}
-        contentContainerStyle={{ paddingBottom: 20 }}
+        contentContainerStyle={{ paddingBottom: navigationSpacing }}
         showsVerticalScrollIndicator={false}
       >
         {/* Balance Overview */}
@@ -317,8 +646,8 @@ export default function FriendDetailScreen({
                   ]}
                 >
                   {isOwnProfile
-                    ? `${currentUser || "You"} owe friends`
-                    : `${currentUser || "You"} owe ${friendName}`}
+                    ? `${currentUserName || "You"} owe friends`
+                    : `${currentUserName || "You"} owe ${friendName}`}
                 </Text>
                 <Text style={[styles.balanceAmount, { color: "#F44336" }]}>
                   {currencySymbol}
@@ -334,8 +663,8 @@ export default function FriendDetailScreen({
                   ]}
                 >
                   {isOwnProfile
-                    ? `Friends owe ${currentUser || "you"}`
-                    : `${friendName} owes ${currentUser || "you"}`}
+                    ? `Friends owe ${currentUserName || "you"}`
+                    : `${friendName} owes ${currentUserName || "you"}`}
                 </Text>
                 <Text style={[styles.balanceAmount, { color: "#4CAF50" }]}>
                   {currencySymbol}
@@ -385,7 +714,7 @@ export default function FriendDetailScreen({
               style={[styles.sectionTitle, darkMode && styles.darkSectionTitle]}
             >
               {isOwnProfile
-                ? `${currentUser || "Your"} Other Balances`
+                ? `${currentUserName || "Your"} Other Balances`
                 : `${friendName}'s Other Balances`}
             </Text>
 
@@ -409,7 +738,7 @@ export default function FriendDetailScreen({
                         ]}
                       >
                         {isOwnProfile
-                          ? `${currentUser || "You"} owes others`
+                          ? `${currentUserName || "You"} owes others`
                           : `${friendName} owes others`}
                       </Text>
                       <Text
@@ -423,7 +752,6 @@ export default function FriendDetailScreen({
                       </Text>
                     </View>
                   </View>
-                  {/* Individual breakdown */}
                   <View style={styles.individualBreakdown}>
                     {Object.entries(friendNetBalanceWithSpecificOthers || {})
                       .filter(([, balance]) => balance < 0)
@@ -457,7 +785,7 @@ export default function FriendDetailScreen({
                         ]}
                       >
                         {isOwnProfile
-                          ? `Others owe ${currentUser || "you"}`
+                          ? `Others owe ${currentUserName || "you"}`
                           : `Others owe ${friendName}`}
                       </Text>
                       <Text
@@ -471,7 +799,6 @@ export default function FriendDetailScreen({
                       </Text>
                     </View>
                   </View>
-                  {/* Individual breakdown */}
                   <View style={styles.individualBreakdown}>
                     {Object.entries(friendNetBalanceWithSpecificOthers || {})
                       .filter(([, balance]) => balance > 0)
@@ -498,7 +825,11 @@ export default function FriendDetailScreen({
         {settlements.length > 0 && (
           <View style={styles.section}>
             <Text
-              style={[styles.sectionTitle, darkMode && styles.darkSectionTitle]}
+              style={[
+                styles.sectionTitle,
+                darkMode && styles.darkSectionTitle,
+                { marginBottom: 16 },
+              ]}
             >
               Settlement History
             </Text>
@@ -535,11 +866,35 @@ export default function FriendDetailScreen({
                         darkMode && styles.darkSettlementDate,
                       ]}
                     >
-                      {new Date(settlement.date).toLocaleDateString()} at{" "}
-                      {new Date(settlement.date).toLocaleTimeString([], {
-                        hour: "2-digit",
-                        minute: "2-digit",
-                      })}
+                      {(() => {
+                        const settlementDate = new Date(settlement.date);
+                        const now = new Date();
+                        const diffDays = Math.floor(
+                          (now - settlementDate) / (1000 * 60 * 60 * 24)
+                        );
+
+                        if (diffDays === 0) {
+                          return `Today at ${settlementDate.toLocaleTimeString(
+                            [],
+                            {
+                              hour: "2-digit",
+                              minute: "2-digit",
+                            }
+                          )}`;
+                        } else if (diffDays === 1) {
+                          return `Yesterday at ${settlementDate.toLocaleTimeString(
+                            [],
+                            {
+                              hour: "2-digit",
+                              minute: "2-digit",
+                            }
+                          )}`;
+                        } else if (diffDays < 7) {
+                          return `${diffDays} days ago`;
+                        } else {
+                          return settlementDate.toLocaleDateString();
+                        }
+                      })()}
                     </Text>
                     <Text
                       style={[
@@ -567,29 +922,6 @@ export default function FriendDetailScreen({
           </View>
         )}
       </ScrollView>
-
-      {/* Action Buttons */}
-      {!isOwnProfile && netBalance !== 0 && (
-        <View
-          style={[
-            styles.actionContainer,
-            darkMode && styles.darkActionContainer,
-          ]}
-        >
-          <TouchableOpacity
-            style={[styles.settleButton, darkMode && styles.darkSettleButton]}
-            onPress={() => setShowSettleModal(true)}
-          >
-            <Ionicons
-              name="checkmark-circle"
-              size={20}
-              color="#fff"
-              style={{ marginRight: 8 }}
-            />
-            <Text style={styles.settleButtonText}>Settle Up</Text>
-          </TouchableOpacity>
-        </View>
-      )}
 
       {/* Settle Up Modal */}
       <Modal
@@ -632,8 +964,26 @@ export default function FriendDetailScreen({
                   placeholder="Enter amount to settle"
                   placeholderTextColor={darkMode ? "#A0AEC0" : "#999"}
                   value={settleAmount}
-                  onChangeText={setSettleAmount}
+                  onChangeText={(text) => {
+                    try {
+                      const cleanValue = text.replace(/[^0-9.]/g, "");
+                      const parts = cleanValue.split(".");
+
+                      let formattedValue = parts[0];
+                      if (parts.length > 1) {
+                        formattedValue += "." + parts[1].substring(0, 2);
+                      }
+
+                      if (formattedValue.length <= 12) {
+                        setSettleAmount(formattedValue);
+                      }
+                    } catch (error) {
+                      console.error("Amount input error:", error);
+                    }
+                  }}
                   keyboardType="numeric"
+                  accessibilityLabel="Settlement amount input"
+                  accessibilityHint="Enter the amount to settle"
                 />
 
                 <TextInput
@@ -645,21 +995,44 @@ export default function FriendDetailScreen({
                   placeholder="Enter mode of payment"
                   placeholderTextColor={darkMode ? "#A0AEC0" : "#999"}
                   value={settleNote}
-                  onChangeText={setSettleNote}
+                  onChangeText={(text) => {
+                    try {
+                      const sanitized = text
+                        .replace(/[<>{}]/g, "")
+                        .substring(0, 200);
+                      setSettleNote(sanitized);
+                    } catch (error) {
+                      console.error("Note input error:", error);
+                    }
+                  }}
                   multiline
                   numberOfLines={2}
+                  maxLength={200}
+                  accessibilityLabel="Payment method input"
+                  accessibilityHint="Enter the payment method used"
                 />
 
                 <View style={styles.modalButtons}>
                   <TouchableOpacity
-                    style={[styles.modalButton, styles.cancelButton]}
+                    style={[
+                      styles.modalButton,
+                      styles.cancelButton,
+                      darkMode && styles.darkCancelButton,
+                    ]}
                     onPress={() => {
                       setShowSettleModal(false);
                       setSettleAmount("");
                       setSettleNote("");
                     }}
                   >
-                    <Text style={styles.cancelButtonText}>Cancel</Text>
+                    <Text
+                      style={[
+                        styles.cancelButtonText,
+                        darkMode && styles.darkCancelButtonText,
+                      ]}
+                    >
+                      Cancel
+                    </Text>
                   </TouchableOpacity>
 
                   <TouchableOpacity
@@ -667,72 +1040,145 @@ export default function FriendDetailScreen({
                       styles.modalButton,
                       [
                         styles.confirmButton,
-                        darkMode && styles.darkconfirmButton,
+                        darkMode && styles.darkConfirmButton,
+                        isLoadingSettlement && { opacity: 0.7 },
                       ],
                     ]}
+                    disabled={isLoadingSettlement}
                     onPress={() => {
-                      const amount = parseFloat(settleAmount);
-                      if (isNaN(amount) || amount <= 0) {
-                        Alert.alert(
-                          "Invalid Amount",
-                          "Please enter a valid amount"
+                      try {
+                        const cleanAmount = settleAmount.replace(
+                          /[^0-9.]/g,
+                          ""
                         );
-                        return;
-                      }
-                      if (amount > Math.abs(netBalance)) {
+                        const amount = parseFloat(cleanAmount);
+
+                        if (!cleanAmount || isNaN(amount) || amount <= 0) {
+                          Alert.alert(
+                            "Invalid Amount",
+                            "Please enter a valid amount greater than 0"
+                          );
+                          return;
+                        }
+
+                        if (amount < 0.01) {
+                          Alert.alert(
+                            "Amount Too Small",
+                            "Amount must be at least 0.01"
+                          );
+                          return;
+                        }
+
+                        if (amount > Math.abs(netBalance)) {
+                          Alert.alert(
+                            "Amount Too High",
+                            `Amount cannot exceed ${currencySymbol}${Math.abs(
+                              netBalance
+                            ).toFixed(2)}`
+                          );
+                          return;
+                        }
+
+                        const cleanNote = settleNote
+                          .replace(/[<>{}]/g, "")
+                          .trim();
+
+                        const noteValidation = validateNoteWordCount(cleanNote);
+                        if (!noteValidation.isValid) {
+                          Alert.alert("Note Too Long", noteValidation.error);
+                          return;
+                        }
+
+                        const isUserPayingFriend = netBalance < 0;
+
+                        const settlement = {
+                          id: `settle_${Date.now()}_${Math.random()}`,
+                          amount: amount,
+                          note: cleanNote || "No payment method specified",
+                          date: new Date().toISOString(),
+                          friendName: friendName,
+                          settledBy: currentUserName || "Unknown User",
+                          payerName: isUserPayingFriend
+                            ? currentUserName
+                            : friendName,
+                          receiverName: isUserPayingFriend
+                            ? friendName
+                            : currentUserName,
+                          direction: isUserPayingFriend
+                            ? "user_to_friend"
+                            : "friend_to_user",
+                        };
+
                         Alert.alert(
-                          "Amount Too High",
-                          `Amount cannot exceed ${currencySymbol}${Math.abs(
-                            netBalance
-                          ).toFixed(2)}`
-                        );
-                        return;
-                      }
+                          "Settle Up",
+                          `Record ${currencySymbol}${amount.toFixed(
+                            2
+                          )} settlement with ${friendName}?\n\nPayment method: ${
+                            settlement.note
+                          }`,
+                          [
+                            { text: "Cancel", style: "cancel" },
+                            {
+                              text: "Confirm",
+                              onPress: async () => {
+                                try {
+                                  setIsLoadingSettlement(true);
 
-                      const settlement = {
-                        id: `settle_${Date.now()}_${Math.random()}`,
-                        amount: amount,
-                        note:
-                          settleNote.trim() || "No payment method specified",
-                        date: new Date().toISOString(),
-                        friendName: friendName,
-                        settledBy: currentUser || "Unknown User",
-                      };
+                                  await new Promise((resolve) =>
+                                    setTimeout(resolve, 800)
+                                  );
 
-                      Alert.alert(
-                        "Settle Up",
-                        `Record ${currencySymbol}${amount.toFixed(
-                          2
-                        )} settlement with ${friendName}?\n\nPayment method: ${
-                          settlement.note
-                        }`,
-                        [
-                          { text: "Cancel", style: "cancel" },
-                          {
-                            text: "Confirm",
-                            onPress: async () => {
-                              await saveSettlement(settlement);
+                                  await saveSettlement(settlement);
 
-                              // TODO: Update actual bill balances here
-                              // This would typically involve updating the bills state
-                              // to reflect the settlement and recalculate balances
+                                  setShowSettleModal(false);
+                                  setSettleAmount("");
+                                  setSettleNote("");
 
-                              Alert.alert(
-                                "Success",
-                                `Settlement of ${currencySymbol}${amount.toFixed(
-                                  2
-                                )} recorded!`
-                              );
-                              setShowSettleModal(false);
-                              setSettleAmount("");
-                              setSettleNote("");
+                                  setTimeout(() => {
+                                    Alert.alert(
+                                      "Settlement Recorded",
+                                      `${currencySymbol}${amount.toFixed(
+                                        2
+                                      )} settlement has been recorded successfully!\n\nBalances have been updated to reflect this payment.`
+                                    );
+                                  }, 300);
+                                } catch (error) {
+                                  console.error(
+                                    "Settlement save error:",
+                                    error
+                                  );
+                                  Alert.alert(
+                                    "Settlement Failed",
+                                    "Unable to save settlement. Please check your connection and try again."
+                                  );
+                                } finally {
+                                  setIsLoadingSettlement(false);
+                                }
+                              },
                             },
-                          },
-                        ]
-                      );
+                          ]
+                        );
+                      } catch (error) {
+                        console.error("Settlement validation error:", error);
+                        Alert.alert(
+                          "Error",
+                          "Failed to process settlement. Please try again."
+                        );
+                      }
                     }}
                   >
-                    <Text style={styles.confirmButtonText}>Settle Up</Text>
+                    {isLoadingSettlement ? (
+                      <ActivityIndicator size="small" color="#FFFFFF" />
+                    ) : (
+                      <Text
+                        style={[
+                          styles.confirmButtonText,
+                          darkMode && styles.darkConfirmButtonText,
+                        ]}
+                      >
+                        Settle Up
+                      </Text>
+                    )}
                   </TouchableOpacity>
                 </View>
               </View>
@@ -745,7 +1191,6 @@ export default function FriendDetailScreen({
 }
 
 const styles = StyleSheet.create({
-  // Container
   container: {
     flex: 1,
     backgroundColor: "#EFE4D2",
@@ -753,8 +1198,6 @@ const styles = StyleSheet.create({
   darkContainer: {
     backgroundColor: "#1A1A1A",
   },
-
-  // Header
   header: {
     backgroundColor: "#fff",
     paddingHorizontal: 20,
@@ -793,24 +1236,20 @@ const styles = StyleSheet.create({
   friendName: {
     fontSize: 24,
     fontWeight: "700",
-    color: "#8B4513", // Brown theme
+    color: "#8B4513",
     marginBottom: 4,
   },
   darkFriendName: {
-    color: "#D69E2E", // Gold in dark mode
+    color: "#D69E2E",
   },
   balanceStatus: {
     fontSize: 16,
     fontWeight: "500",
   },
-
-  // Scroll Container
   scrollContainer: {
     flex: 1,
     padding: 20,
   },
-
-  // Sections
   section: {
     marginBottom: 24,
   },
@@ -823,8 +1262,6 @@ const styles = StyleSheet.create({
   darkSectionTitle: {
     color: "#FFFFFF",
   },
-
-  // Balance Card
   balanceCard: {
     backgroundColor: "#fff",
     borderRadius: 16,
@@ -885,8 +1322,6 @@ const styles = StyleSheet.create({
     fontSize: 24,
     fontWeight: "800",
   },
-
-  // Other Balances Card
   otherBalancesCard: {
     backgroundColor: "#F8FAFC",
     borderRadius: 12,
@@ -935,41 +1370,66 @@ const styles = StyleSheet.create({
     textAlign: "right",
     minWidth: 80,
   },
-
-  // Action Container
-  actionContainer: {
-    padding: 20,
-    borderTopWidth: 1,
-    borderTopColor: "#E5E7EB",
+  headerActionContainer: {
+    padding: 16,
+    paddingTop: 12,
     backgroundColor: "#fff",
+    flexDirection: "row",
+    justifyContent: "center",
+    gap: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: "#E5E7EB",
   },
-  darkActionContainer: {
+  darkHeaderActionContainer: {
     backgroundColor: "#2D3748",
-    borderTopColor: "#4A5568",
+    borderBottomColor: "#4A5568",
   },
-  settleButton: {
-    backgroundColor: "#8B4513", // Brown theme
+  headerChatButton: {
+    backgroundColor: "#2196F3",
     flexDirection: "row",
     justifyContent: "center",
     alignItems: "center",
-    paddingVertical: 16,
-    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 8,
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
+    shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.1,
-    shadowRadius: 4,
+    shadowRadius: 2,
     elevation: 2,
+    flex: 1,
   },
-  darkSettleButton: {
-    backgroundColor: "#D69E2E", // Gold in dark mode
+  darkHeaderChatButton: {
+    backgroundColor: "#64B5F6",
   },
-  settleButtonText: {
+  headerChatButtonText: {
     color: "#fff",
     fontWeight: "600",
-    fontSize: 16,
+    fontSize: 14,
   },
-
-  // Modal Styles
+  headerSettleButton: {
+    backgroundColor: "#8B4513",
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 8,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
+    flex: 1,
+  },
+  darkHeaderSettleButton: {
+    backgroundColor: "#D69E2E",
+  },
+  headerSettleButtonText: {
+    color: "#fff",
+    fontWeight: "600",
+    fontSize: 14,
+  },
   modalOverlay: {
     flex: 1,
     backgroundColor: "rgba(0, 0, 0, 0.5)",
@@ -1036,22 +1496,30 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#D1D5DB",
   },
+  darkCancelButton: {
+    backgroundColor: "#374151",
+    borderColor: "#4B5563",
+  },
   cancelButtonText: {
     color: "#6B7280",
     fontWeight: "500",
   },
+  darkCancelButtonText: {
+    color: "#E2E8F0",
+  },
   confirmButton: {
     backgroundColor: "#8B4513",
   },
-  darkconfirmButton: {
-    backgroundColor: "#D69E2E", // Gold in dark mode
+  darkConfirmButton: {
+    backgroundColor: "#D69E2E",
   },
   confirmButtonText: {
     color: "#FFFFFF",
     fontWeight: "600",
   },
-
-  // Settlement History Styles
+  darkConfirmButtonText: {
+    color: "#FFFFFF",
+  },
   settlementCard: {
     backgroundColor: "#F8FAFC",
     borderRadius: 12,
@@ -1118,14 +1586,12 @@ const styles = StyleSheet.create({
   darkMoreSettlements: {
     color: "#A0AEC0",
   },
-
-  // Individual breakdown styles
   otherBalanceSection: {
     marginBottom: 16,
   },
   individualBreakdown: {
     marginTop: 8,
-    marginLeft: 44, // Align with the content above
+    marginLeft: 44,
   },
   individualItem: {
     fontSize: 14,
