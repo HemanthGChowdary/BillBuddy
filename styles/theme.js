@@ -9,16 +9,16 @@ export const Colors = {
   primary: "#8B4513", // Brown - main brand color
   primaryLight: "#D4A574", // Light brown
   primaryDark: "#5D2F0A", // Dark brown
-  
+
   // Secondary Brand Colors (Gold for dark mode)
   secondary: "#D69E2E", // Gold
   secondaryLight: "#F6E05E", // Light gold
   secondaryDark: "#B7791F", // Dark gold
-  
+
   // Neutral Colors
   white: "#FFFFFF",
   black: "#000000",
-  
+
   // Gray Scale
   gray50: "#F9FAFB",
   gray100: "#F3F4F6",
@@ -30,7 +30,7 @@ export const Colors = {
   gray700: "#374151",
   gray800: "#1F2937",
   gray900: "#111827",
-  
+
   // Background Colors
   background: {
     light: "#EFE4D2", // Light cream background
@@ -44,7 +44,7 @@ export const Colors = {
       dark: "#1A202C",
     },
   },
-  
+
   // Text Colors
   text: {
     primary: {
@@ -64,7 +64,7 @@ export const Colors = {
       dark: "#D69E2E",
     },
   },
-  
+
   // Status Colors
   success: {
     light: "#10B981",
@@ -78,7 +78,7 @@ export const Colors = {
       dark: "#4CAF50",
     },
   },
-  
+
   warning: {
     light: "#F59E0B",
     dark: "#FBBF24",
@@ -91,7 +91,7 @@ export const Colors = {
       dark: "#F59E0B",
     },
   },
-  
+
   error: {
     light: "#EF4444",
     dark: "#F87171",
@@ -104,7 +104,7 @@ export const Colors = {
       dark: "#F44336",
     },
   },
-  
+
   info: {
     light: "#3B82F6",
     dark: "#60A5FA",
@@ -117,7 +117,7 @@ export const Colors = {
       dark: "#3B82F6",
     },
   },
-  
+
   // Action Button Colors
   edit: {
     background: {
@@ -133,7 +133,7 @@ export const Colors = {
       dark: "#D69E2E",
     },
   },
-  
+
   delete: {
     background: {
       light: "#FFF5F5",
@@ -148,7 +148,7 @@ export const Colors = {
       dark: "#EF5350",
     },
   },
-  
+
   duplicate: {
     background: {
       light: "#F1F8E9",
@@ -163,7 +163,7 @@ export const Colors = {
       dark: "#81C784",
     },
   },
-  
+
   invite: {
     background: {
       light: "#F1F8E9",
@@ -188,7 +188,7 @@ export const Typography = {
     medium: "System",
     bold: "System",
   },
-  
+
   // Font Sizes
   fontSize: {
     xs: 12,
@@ -202,7 +202,7 @@ export const Typography = {
     "4xl": 32,
     "5xl": 36,
   },
-  
+
   // Font Weights
   fontWeight: {
     light: "300",
@@ -212,7 +212,7 @@ export const Typography = {
     bold: "700",
     extrabold: "800",
   },
-  
+
   // Line Heights
   lineHeight: {
     tight: 1.2,
@@ -220,7 +220,7 @@ export const Typography = {
     relaxed: 1.6,
     loose: 1.8,
   },
-  
+
   // Text Styles
   textStyles: {
     // Headers
@@ -240,11 +240,11 @@ export const Typography = {
       lineHeight: 26,
     },
     h4: {
-      fontSize: 18,
+      fontSize: 20,
       fontWeight: "600",
       lineHeight: 24,
     },
-    
+
     // Body Text
     body: {
       fontSize: 16,
@@ -256,7 +256,7 @@ export const Typography = {
       fontWeight: "400",
       lineHeight: 20,
     },
-    
+
     // Labels and Captions
     label: {
       fontSize: 14,
@@ -268,7 +268,7 @@ export const Typography = {
       fontWeight: "400",
       lineHeight: 16,
     },
-    
+
     // Button Text
     button: {
       fontSize: 13,

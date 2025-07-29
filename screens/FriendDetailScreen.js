@@ -19,6 +19,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { getCurrencySymbol, validateNoteWordCount } from "../utils/helpers";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { Colors, Typography, Spacing, BorderRadius } from "../styles/theme";
 
 export default function FriendDetailScreen({
   route,
@@ -446,7 +447,7 @@ export default function FriendDetailScreen({
     <SafeAreaView style={[styles.container, darkMode && styles.darkContainer]}>
       <StatusBar
         barStyle={darkMode ? "light-content" : "dark-content"}
-        backgroundColor={darkMode ? "#1A202C" : "#EFE4D2"}
+        backgroundColor={darkMode ? Colors.background.dark : Colors.background.light}
       />
 
       {/* Header */}
@@ -485,7 +486,7 @@ export default function FriendDetailScreen({
                 width: 20,
                 height: 20,
                 borderRadius: 10,
-                backgroundColor: "#4CAF50",
+                backgroundColor: Colors.success.light,
                 borderWidth: 3,
                 borderColor: darkMode ? "#2D3748" : "#FFFFFF",
                 shadowColor: "#000",
@@ -517,7 +518,7 @@ export default function FriendDetailScreen({
               <Text
                 style={{
                   fontSize: 12,
-                  color: "#4CAF50",
+                  color: Colors.success.light,
                   fontWeight: "500",
                   marginLeft: 8,
                 }}
@@ -649,7 +650,7 @@ export default function FriendDetailScreen({
                     ? `${currentUserName || "You"} owe friends`
                     : `${currentUserName || "You"} owe ${friendName}`}
                 </Text>
-                <Text style={[styles.balanceAmount, { color: "#F44336" }]}>
+                <Text style={[styles.balanceAmount, { color: Colors.error.light }]}>
                   {currencySymbol}
                   {youOweFriend.toFixed(2)}
                 </Text>
@@ -666,7 +667,7 @@ export default function FriendDetailScreen({
                     ? `Friends owe ${currentUserName || "you"}`
                     : `${friendName} owes ${currentUserName || "you"}`}
                 </Text>
-                <Text style={[styles.balanceAmount, { color: "#4CAF50" }]}>
+                <Text style={[styles.balanceAmount, { color: Colors.success.light }]}>
                   {currencySymbol}
                   {friendOwesYou.toFixed(2)}
                 </Text>
@@ -744,7 +745,7 @@ export default function FriendDetailScreen({
                       <Text
                         style={[
                           styles.otherBalanceAmount,
-                          { color: "#F44336" },
+                          { color: Colors.error.light },
                         ]}
                       >
                         {currencySymbol}
@@ -791,7 +792,7 @@ export default function FriendDetailScreen({
                       <Text
                         style={[
                           styles.otherBalanceAmount,
-                          { color: "#4CAF50" },
+                          { color: Colors.success.light },
                         ]}
                       >
                         {currencySymbol}
@@ -1193,21 +1194,21 @@ export default function FriendDetailScreen({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#EFE4D2",
+    backgroundColor: Colors.background.light,
   },
   darkContainer: {
-    backgroundColor: "#1A1A1A",
+    backgroundColor: Colors.background.dark,
   },
   header: {
-    backgroundColor: "#fff",
-    paddingHorizontal: 20,
-    paddingVertical: 24,
+    backgroundColor: Colors.background.card.light,
+    paddingHorizontal: Spacing.xl,
+    paddingVertical: Spacing["2xl"],
     borderBottomWidth: 1,
-    borderBottomColor: "#E5E7EB",
+    borderBottomColor: Colors.gray200,
   },
   darkHeader: {
-    backgroundColor: "#2D3748",
-    borderBottomColor: "#4A5568",
+    backgroundColor: Colors.background.card.dark,
+    borderBottomColor: Colors.gray600,
   },
   headerContent: {
     flexDirection: "row",
@@ -1217,15 +1218,15 @@ const styles = StyleSheet.create({
     width: 60,
     height: 60,
     borderRadius: 30,
-    backgroundColor: "#EFE4D2",
+    backgroundColor: Colors.background.light,
     justifyContent: "center",
     alignItems: "center",
     borderWidth: 2,
-    borderColor: "#D69E2E",
+    borderColor: Colors.text.accent.dark,
   },
   darkFriendAvatar: {
-    backgroundColor: "#4A5568",
-    borderColor: "#D69E2E",
+    backgroundColor: Colors.gray600,
+    borderColor: Colors.text.accent.dark,
   },
   friendEmoji: {
     fontSize: 32,
@@ -1236,11 +1237,11 @@ const styles = StyleSheet.create({
   friendName: {
     fontSize: 24,
     fontWeight: "700",
-    color: "#8B4513",
+    color: Colors.primary,
     marginBottom: 4,
   },
   darkFriendName: {
-    color: "#D69E2E",
+    color: Colors.text.accent.dark,
   },
   balanceStatus: {
     fontSize: 16,

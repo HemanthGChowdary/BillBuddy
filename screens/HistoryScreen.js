@@ -28,6 +28,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import DropDownPicker from "react-native-dropdown-picker";
+import { Colors } from "../styles/theme";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import * as ImagePicker from "expo-image-picker";
 import * as Haptics from "expo-haptics";
@@ -37,6 +38,10 @@ import {
   validateNoteWordCount,
   getWordCount,
 } from "../utils/helpers";
+import { 
+  requestCameraPermissionWithEducation, 
+  requestMediaLibraryPermissionWithEducation 
+} from "../utils/permissions";
 
 // Constants for magic numbers
 const CONSTANTS = {
@@ -153,18 +158,8 @@ const validateSplitGroup = (splitGroup) => {
   );
 };
 
-const validatePercentageTotal = (totalPercentage) => {
-  return (
-    totalPercentage >= 0 && totalPercentage <= CONSTANTS.PERCENTAGE_TOLERANCE
-  );
-};
-
 const validateCustomSplitAmount = (amount) => {
   return amount >= 0 && amount <= CONSTANTS.MAX_AMOUNT_VALUE;
-};
-
-const validateCustomSplitPercentage = (percentage) => {
-  return percentage >= 0 && percentage <= CONSTANTS.MAX_PERCENTAGE;
 };
 
 // Additional data validation and sanitization functions
@@ -307,7 +302,11 @@ const ImageViewerModal = ({
                   <Ionicons
                     name="close"
                     size={24}
-                    color={darkMode ? "#E2E8F0" : "#374151"}
+                    color={
+                      darkMode
+                        ? Colors.text.primary.dark
+                        : Colors.text.primary.light
+                    }
                   />
                 </TouchableOpacity>
               </View>
@@ -378,7 +377,11 @@ const ImageViewerModal = ({
                 <Ionicons
                   name="close"
                   size={24}
-                  color={darkMode ? "#E2E8F0" : "#374151"}
+                  color={
+                    darkMode
+                      ? Colors.text.primary.dark
+                      : Colors.text.primary.light
+                  }
                 />
               </TouchableOpacity>
             </View>
@@ -517,7 +520,11 @@ const BillItem = React.memo(
                 <Ionicons
                   name="camera-outline"
                   size={16}
-                  color={darkMode ? "#A0AEC0" : "#6B7280"}
+                  color={
+                    darkMode
+                      ? Colors.text.secondary.dark
+                      : Colors.text.secondary.light
+                  }
                 />
               </TouchableOpacity>
             )}
@@ -567,7 +574,11 @@ const BillItem = React.memo(
               <Ionicons
                 name="document-text"
                 size={14}
-                color={darkMode ? "#A0AEC0" : "#6B7280"}
+                color={
+                  darkMode
+                    ? Colors.text.secondary.dark
+                    : Colors.text.secondary.light
+                }
               />
               <Text
                 style={[styles.billNote, darkMode && styles.darkSubtext]}
@@ -919,7 +930,11 @@ const EditBillModal = ({
               <Ionicons
                 name="close"
                 size={24}
-                color={darkMode ? "#E2E8F0" : "#374151"}
+                color={
+                  darkMode
+                    ? Colors.text.primary.dark
+                    : Colors.text.primary.light
+                }
               />
             </TouchableOpacity>
           </View>
@@ -1682,7 +1697,7 @@ export default function HistoryScreen({
   const [isLoading, setIsLoading] = useState(false);
   const [isDuplicating, setIsDuplicating] = useState(null); // Track which bill is being duplicated
   const [isDeleting, setIsDeleting] = useState(null); // Track which bill is being deleted
-  const [isUploadingImage, setIsUploadingImage] = useState(null); // Track image upload state
+  // Image upload state removed - not displayed in UI
   const [appLoading, setAppLoading] = useState(true); // Track app initialization
   const [searchQuery, setSearchQuery] = useState("");
   const [sortBy, setSortBy] = useState("date");
@@ -1715,6 +1730,13 @@ export default function HistoryScreen({
       const invalidFriends = friends.filter(
         (friend) => !validateFriendData(friend)
       );
+      
+      if (invalidBills.length > 0) {
+        console.warn(`Found ${invalidBills.length} invalid bills:`, invalidBills);
+      }
+      if (invalidFriends.length > 0) {
+        console.warn(`Found ${invalidFriends.length} invalid friends:`, invalidFriends);
+      }
     }
   }, [bills, friends]);
 
@@ -1752,8 +1774,6 @@ export default function HistoryScreen({
     profileName && profileName.trim()
       ? sanitizeTextInput(profileName.trim(), CONSTANTS.MAX_NAME_LENGTH)
       : "You";
-
-  const youWithEmoji = `${profileEmoji || "👤"} ${you}`;
 
   // Note: In multi-user environment, bills should use user IDs instead of display names
   // for proper data isolation and user identification
@@ -1973,7 +1993,10 @@ export default function HistoryScreen({
     setSplitTypeDropdownOpen(false);
   }, []);
 
-  // Camera functions - exact copy from BillsScreen
+  // Permission handler for camera and library access
+  // Removed - using new permission utility functions instead
+
+  // Camera functions - improved from Profile screen approach
   const pickImage = useCallback(
     async (billItem) => {
       try {
@@ -1982,12 +2005,16 @@ export default function HistoryScreen({
           return;
         }
 
-        setIsUploadingImage(billItem.id);
+        const hasPermission = await requestMediaLibraryPermissionWithEducation('update receipt photos');
+        if (!hasPermission) return;
         const result = await ImagePicker.launchImageLibraryAsync({
           mediaTypes: ["images"],
-          allowsEditing: true,
-          aspect: CONSTANTS.IMAGE_ASPECT_RATIO,
-          quality: CONSTANTS.IMAGE_QUALITY_HIGH,
+          allowsEditing: false, // Disable editing to prevent zoom crashes
+          quality: 0.5, // Lower quality to prevent memory issues
+          allowsMultipleSelection: false,
+          exif: false,
+          base64: false,
+          selectionLimit: 1,
         });
 
         if (!result.canceled && result.assets?.length > 0) {
@@ -1999,12 +2026,13 @@ export default function HistoryScreen({
           Alert.alert("Success!", "Photo updated successfully!");
         }
       } catch (error) {
-        Alert.alert("Error", "Failed to select image");
-      } finally {
-        setIsUploadingImage(null);
+        Alert.alert(
+          "Error",
+          `Unable to access photo library: ${error.message || "Please try again."}`
+        );
       }
     },
-    [editBill, setIsUploadingImage]
+    [editBill]
   );
 
   const launchCamera = useCallback(
@@ -2015,25 +2043,16 @@ export default function HistoryScreen({
           return;
         }
 
-        setIsUploadingImage(billItem.id);
-        const { status: cameraStatus } =
-          await ImagePicker.requestCameraPermissionsAsync();
-        const { status: mediaStatus } =
-          await ImagePicker.requestMediaLibraryPermissionsAsync();
-
-        if (cameraStatus !== "granted" || mediaStatus !== "granted") {
-          Alert.alert(
-            "Permissions Required",
-            "Please grant camera and media permissions."
-          );
-          return;
-        }
+        const hasPermission = await requestCameraPermissionWithEducation('take receipt photos');
+        if (!hasPermission) return;
 
         const result = await ImagePicker.launchCameraAsync({
           mediaTypes: ["images"],
-          allowsEditing: true,
-          aspect: CONSTANTS.IMAGE_ASPECT_RATIO,
-          quality: CONSTANTS.IMAGE_QUALITY_MEDIUM,
+          allowsEditing: false,
+          quality: 0.5,
+          allowsMultipleSelection: false,
+          exif: false,
+          base64: false,
         });
 
         if (!result.canceled && result.assets?.length > 0) {
@@ -2045,12 +2064,11 @@ export default function HistoryScreen({
           Alert.alert("Success!", "Photo updated successfully!");
         }
       } catch (error) {
-        Alert.alert("Error", "Unable to launch camera.");
-      } finally {
-        setIsUploadingImage(null);
+        console.error("Camera error:", error);
+        Alert.alert("Error", "Unable to launch camera. Please try again.");
       }
     },
-    [editBill, setIsUploadingImage]
+    [editBill]
   );
 
   // Bill details functionality
@@ -2681,7 +2699,11 @@ export default function HistoryScreen({
                 <Ionicons
                   name="close"
                   size={24}
-                  color={darkMode ? "#E2E8F0" : "#374151"}
+                  color={
+                    darkMode
+                      ? Colors.text.primary.dark
+                      : Colors.text.primary.light
+                  }
                 />
               </TouchableOpacity>
             </View>
@@ -3350,7 +3372,7 @@ const styles = StyleSheet.create({
     color: "#6B7280",
     textAlign: "center",
     lineHeight: 22,
-    marginBottom: 20,
+    marginBottom: 16,
   },
   clearFiltersButton: {
     backgroundColor: "#8B4513", // Brown theme

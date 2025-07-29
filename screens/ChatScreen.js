@@ -28,6 +28,11 @@ import * as ImagePicker from "expo-image-picker";
 import * as DocumentPicker from "expo-document-picker";
 import * as Haptics from "expo-haptics";
 import PropTypes from "prop-types";
+import { Colors, Typography, Spacing, BorderRadius } from "../styles/theme";
+import { 
+  requestCameraPermissionWithEducation, 
+  requestMediaLibraryPermissionWithEducation 
+} from "../utils/permissions";
 
 // Error Boundary Component for crash protection
 class ChatErrorBoundary extends Component {
@@ -54,14 +59,14 @@ class ChatErrorBoundary extends Component {
             justifyContent: "center",
             alignItems: "center",
             padding: 20,
-            backgroundColor: this.props.darkMode ? "#0D1117" : "#F6F8FA",
+            backgroundColor: this.props.darkMode ? Colors.background.dark : Colors.background.light,
           }}
         >
           <View style={{ alignItems: "center" }}>
             <Ionicons
               name="chatbubble-outline"
               size={64}
-              color={this.props.darkMode ? "#8B949E" : "#656D76"}
+              color={this.props.darkMode ? Colors.text.secondary.dark : Colors.text.secondary.light}
             />
             <Text
               style={{
@@ -70,7 +75,7 @@ class ChatErrorBoundary extends Component {
                 marginTop: 16,
                 marginBottom: 8,
                 textAlign: "center",
-                color: this.props.darkMode ? "#F0F6FC" : "#24292F",
+                color: this.props.darkMode ? Colors.text.primary.dark : Colors.text.primary.light,
               }}
             >
               Chat Temporarily Unavailable
@@ -296,59 +301,35 @@ function ChatScreen({ route, navigation, darkMode = false }) {
     }
   }, [inputText, messages, currentUser]);
 
-  // Image handling functions
-  const requestImagePermissions = async () => {
-    const { status: cameraStatus } =
-      await ImagePicker.requestCameraPermissionsAsync();
-    const { status: mediaStatus } =
-      await ImagePicker.requestMediaLibraryPermissionsAsync();
-
-    if (cameraStatus !== "granted" || mediaStatus !== "granted") {
-      Alert.alert(
-        "Permissions Required",
-        "Camera and photo library access are needed to send images."
-      );
-      return false;
-    }
-    return true;
-  };
+  // Image handling functions - using new permission utility
 
   const handleImagePicker = async () => {
-    if (!(await requestImagePermissions())) return;
+    // Direct library access with proper permission education
+    const hasPermission = await requestMediaLibraryPermissionWithEducation('send photos in chat');
+    if (!hasPermission) return;
 
-    if (Platform.OS === "ios") {
-      ActionSheetIOS.showActionSheetWithOptions(
-        {
-          options: ["Cancel", "Take Photo", "Choose from Library"],
-          cancelButtonIndex: 0,
-        },
-        (buttonIndex) => {
-          if (buttonIndex === 1) launchCamera();
-          else if (buttonIndex === 2) pickImage();
-        }
-      );
-    } else {
-      Alert.alert("Select Image", "Choose an option:", [
-        { text: "Cancel", style: "cancel" },
-        { text: "Take Photo", onPress: launchCamera },
-        { text: "Choose from Library", onPress: pickImage },
-      ]);
-    }
+    pickImage();
   };
 
   const launchCamera = async () => {
     try {
+      const hasPermission = await requestCameraPermissionWithEducation('take photos for chat');
+      if (!hasPermission) return;
+
       const result = await ImagePicker.launchCameraAsync({
         mediaTypes: ["images"],
-        allowsEditing: true,
-        aspect: [4, 3],
-        quality: 0.8,
+        allowsEditing: false,
+        quality: 0.5,
+        allowsMultipleSelection: false,
+        exif: false,
+        base64: false,
       });
 
       if (!result.canceled && result.assets?.[0]) {
         sendImageMessage(result.assets[0].uri);
       }
     } catch (error) {
+      console.error("Camera error:", error);
       Alert.alert("Error", "Unable to access camera. Please try again.");
     }
   };
@@ -357,15 +338,19 @@ function ChatScreen({ route, navigation, darkMode = false }) {
     try {
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ["images"],
-        allowsEditing: true,
-        aspect: [4, 3],
-        quality: 0.8,
+        allowsEditing: false,
+        quality: 0.5,
+        allowsMultipleSelection: false,
+        exif: false,
+        base64: false,
+        selectionLimit: 1,
       });
 
       if (!result.canceled && result.assets?.[0]) {
         sendImageMessage(result.assets[0].uri);
       }
     } catch (error) {
+      console.error("Library error:", error);
       Alert.alert("Error", "Unable to access photo library. Please try again.");
     }
   };

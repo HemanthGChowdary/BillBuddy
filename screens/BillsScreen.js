@@ -26,6 +26,12 @@ import * as ImagePicker from "expo-image-picker";
 import * as Haptics from "expo-haptics";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { BlurView } from "expo-blur";
+import { Colors, Typography, Spacing, BorderRadius } from "../styles/theme";
+import { 
+  requestCameraPermissionWithEducation, 
+  requestMediaLibraryPermissionWithEducation,
+  checkImagePermissions 
+} from "../utils/permissions";
 import {
   currencyOptions,
   getFriendsDropdownOptions,
@@ -383,44 +389,71 @@ const BillsScreen = ({
     billName,
   ]);
 
+  // Check if this is first time using camera/library
+  const checkFirstTimePermissions = async () => {
+    const permissions = await checkImagePermissions();
+    return permissions.both;
+  };
+
   const pickImage = useCallback(async () => {
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ["images"],
-      allowsEditing: true,
-      aspect: [4, 3],
-      quality: 1,
-    });
-    if (!result.canceled && result.assets?.length > 0) {
-      setBillPhoto(result.assets[0].uri);
-    }
-  }, []);
-
-  const launchCamera = useCallback(async () => {
-    const { status: cameraStatus } =
-      await ImagePicker.requestCameraPermissionsAsync();
-    const { status: mediaStatus } =
-      await ImagePicker.requestMediaLibraryPermissionsAsync();
-
-    if (cameraStatus !== "granted" || mediaStatus !== "granted") {
-      Alert.alert(
-        "Permissions Required",
-        "Please grant camera and media permissions to use this feature."
-      );
-      return;
-    }
-
+    // Request permission with proper education for photo library
+    const hasPermission = await requestMediaLibraryPermissionWithEducation('attach receipt photos');
+    if (!hasPermission) return;
+    
     try {
-      const result = await ImagePicker.launchCameraAsync({
+      const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ["images"],
-        allowsEditing: true,
-        aspect: [4, 3],
-        quality: 0.8,
+        allowsEditing: false, // Disable editing to prevent zoom crashes
+        quality: 0.5, // Lower quality to prevent memory issues
+        allowsMultipleSelection: false,
+        exif: false,
+        base64: false,
+        selectionLimit: 1,
       });
+      
       if (!result.canceled && result.assets?.length > 0) {
         setBillPhoto(result.assets[0].uri);
       }
     } catch (error) {
-      Alert.alert("Error", "Unable to launch camera. Please try again.");
+      Alert.alert(
+        "Error",
+        `Unable to access photo library: ${error.message || "Please try again."}`
+      );
+    }
+  }, []);
+
+  const launchCamera = useCallback(async () => {
+    // Request permission with proper education for camera
+    const hasPermission = await requestCameraPermissionWithEducation('take receipt photos');
+    if (!hasPermission) return;
+    
+    try {
+      const result = await ImagePicker.launchCameraAsync({
+        mediaTypes: ["images"],
+        allowsEditing: false, // Disable editing to prevent zoom crashes
+        quality: 0.5, // Lower quality to prevent memory issues
+        exif: false,
+        base64: false,
+      });
+      
+      if (!result.canceled && result.assets?.length > 0) {
+        setBillPhoto(result.assets[0].uri);
+      }
+    } catch (error) {
+      if (
+        error.message?.includes("permission") ||
+        error.message?.includes("Permission")
+      ) {
+        Alert.alert(
+          "Permission Error",
+          "Please allow camera access in Settings."
+        );
+      } else {
+        Alert.alert(
+          "Error",
+          `Unable to access camera: ${error.message || "Please try again."}`
+        );
+      }
     }
   }, []);
 
@@ -605,7 +638,7 @@ const BillsScreen = ({
     <SafeAreaView style={styles.container}>
       <StatusBar
         barStyle={darkMode ? "light-content" : "dark-content"}
-        backgroundColor={darkMode ? "#1A1A1A" : "#EFE4D2"}
+        backgroundColor={darkMode ? Colors.background.dark : Colors.background.light}
       />
 
       {/* Header - Glassmorphism */}
@@ -658,7 +691,7 @@ const BillsScreen = ({
                 refreshing={refreshing}
                 onRefresh={onRefresh}
                 tintColor={darkMode ? "#D69E2E" : "#8B4513"} // Brown/Gold color pattern
-                colors={[darkMode ? "#D69E2E" : "#8B4513"]} // Brown/Gold color pattern
+                colors={[darkMode ? Colors.text.accent.dark : Colors.primary]} // Brown/Gold color pattern
                 progressBackgroundColor={darkMode ? "#2D3748" : "#FFFFFF"}
                 progressViewOffset={120} // Push refresh icon down below header
               />
@@ -1100,7 +1133,7 @@ const createStyles = (darkMode = false, insets = { top: 0 }) =>
   StyleSheet.create({
     container: {
       flex: 1,
-      backgroundColor: darkMode ? "#1A1A1A" : "#EFE4D2",
+      backgroundColor: darkMode ? Colors.background.dark : Colors.background.light,
     },
 
     // Glassmorphism Header - Like Navigation Bar
@@ -1147,7 +1180,7 @@ const createStyles = (darkMode = false, insets = { top: 0 }) =>
       width: 48,
       height: 48,
       borderRadius: 16,
-      backgroundColor: darkMode ? "#D69E2E" : "#8B4513", // Gold/Brown base
+      backgroundColor: darkMode ? Colors.text.accent.dark : Colors.primary, // Gold/Brown base
       justifyContent: "center",
       alignItems: "center",
       shadowColor: "#000",
@@ -1161,7 +1194,7 @@ const createStyles = (darkMode = false, insets = { top: 0 }) =>
       width: 40,
       height: 40,
       borderRadius: 12,
-      backgroundColor: darkMode ? "#B7791F" : "#A0522D", // Darker brown/gold
+      backgroundColor: darkMode ? Colors.secondaryDark : Colors.primaryDark, // Darker brown/gold
       justifyContent: "center",
       alignItems: "center",
       borderWidth: 1,
@@ -1171,7 +1204,7 @@ const createStyles = (darkMode = false, insets = { top: 0 }) =>
     logoText: {
       fontSize: 16,
       fontWeight: "800",
-      color: "#FFFFFF",
+      color: Colors.white,
       textShadowColor: "rgba(0, 0, 0, 0.3)",
       textShadowOffset: { width: 0, height: 1 },
       textShadowRadius: 2,
@@ -1185,7 +1218,7 @@ const createStyles = (darkMode = false, insets = { top: 0 }) =>
     headerTitle: {
       fontSize: 24,
       fontWeight: "700",
-      color: darkMode ? "#D69E2E" : "#8B4513", // Brown/Gold color pattern
+      color: darkMode ? Colors.text.accent.dark : Colors.primary, // Brown/Gold color pattern
       marginBottom: 2,
     },
 
@@ -1293,7 +1326,7 @@ const createStyles = (darkMode = false, insets = { top: 0 }) =>
       elevation: 3,
     },
     datePickerDoneText: {
-      color: "#FFFFFF",
+      color: Colors.white,
       fontWeight: "600",
       fontSize: 16,
     },
@@ -1347,7 +1380,7 @@ const createStyles = (darkMode = false, insets = { top: 0 }) =>
       backgroundColor: darkMode ? "#D69E2E" : "#8B4513",
     },
     badgeText: {
-      color: "#FFFFFF",
+      color: Colors.white,
       fontSize: 12,
       fontWeight: "500",
     },
@@ -1390,7 +1423,7 @@ const createStyles = (darkMode = false, insets = { top: 0 }) =>
       fontWeight: "500",
     },
     suggestionChipTextSelected: {
-      color: "#FFFFFF",
+      color: Colors.white,
     },
 
     // Split Type Selector
@@ -1418,7 +1451,7 @@ const createStyles = (darkMode = false, insets = { top: 0 }) =>
       color: darkMode ? "#E2E8F0" : "#6B7280",
     },
     splitTypeTextActive: {
-      color: "#FFFFFF",
+      color: Colors.white,
     },
 
     // Custom Split Inputs
@@ -1554,7 +1587,7 @@ const createStyles = (darkMode = false, insets = { top: 0 }) =>
       borderRadius: 8,
     },
     clearImageButtonText: {
-      color: "#FFFFFF",
+      color: Colors.white,
       fontSize: 14,
       fontWeight: "600",
     },
@@ -1585,7 +1618,7 @@ const createStyles = (darkMode = false, insets = { top: 0 }) =>
       opacity: 0.6,
     },
     addButtonText: {
-      color: "#FFFFFF",
+      color: Colors.white,
       fontSize: 18,
       fontWeight: "700",
     },

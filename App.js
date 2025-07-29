@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef } from "react";
 import { NavigationContainer } from "@react-navigation/native";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -10,16 +10,17 @@ import {
   useSafeAreaInsets,
   SafeAreaProvider,
 } from "react-native-safe-area-context";
+import { Colors } from "./styles/theme";
 
 import BillsScreen from "./screens/BillsScreen";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import FontAwesome5 from "@expo/vector-icons/FontAwesome5";
 import FontAwesome6 from "@expo/vector-icons/FontAwesome6";
-import Ionicons from "@expo/vector-icons/Ionicons";
 import FriendsStackScreen from "./screens/FriendsStackScreen";
 import HistoryScreen from "./screens/HistoryScreen";
 import GroupsScreen from "./screens/GroupsScreen";
 import ProfileScreen from "./screens/ProfileScreen";
+import AuthScreen from "./screens/AuthScreen";
 import AntDesign from "@expo/vector-icons/AntDesign";
 import Octicons from "@expo/vector-icons/Octicons";
 
@@ -41,6 +42,8 @@ function AppContent({ isChatActive }) {
   const [liquidGlassMode, setLiquidGlassMode] = useState(false);
   const [currentTabIndex, setCurrentTabIndex] = useState(0);
   const [lastTap, setLastTap] = useState(null);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [isCheckingAuth, setIsCheckingAuth] = useState(true);
   const insets = useSafeAreaInsets();
   const tabNames = ["Bills", "Friends", "Groups", "History", "Profile"];
 
@@ -111,6 +114,7 @@ function AppContent({ isChatActive }) {
       const savedProfileName = await AsyncStorage.getItem("profileName");
       const savedProfileEmail = await AsyncStorage.getItem("profileEmail");
       const savedProfilePhone = await AsyncStorage.getItem("profilePhone");
+      const savedAuthState = await AsyncStorage.getItem("isAuthenticated");
 
       if (savedDarkMode !== null) setDarkMode(JSON.parse(savedDarkMode));
       if (savedLiquidGlassMode !== null)
@@ -119,6 +123,39 @@ function AppContent({ isChatActive }) {
       if (savedProfileName) setProfileName(savedProfileName);
       if (savedProfileEmail) setProfileEmail(savedProfileEmail);
       if (savedProfilePhone) setProfilePhone(savedProfilePhone);
+      
+      // Check if user is authenticated and account is not deleted
+      if (savedAuthState !== null && savedProfileEmail) {
+        const isAuthenticatedValue = JSON.parse(savedAuthState);
+        if (isAuthenticatedValue) {
+          // Check if this email was deleted
+          const emailToCheck = savedProfileEmail.toLowerCase();
+          const deletedAccountsData = await AsyncStorage.getItem("@deleted_accounts");
+          
+          if (deletedAccountsData) {
+            const deletedAccounts = JSON.parse(deletedAccountsData);
+            const isDeleted = deletedAccounts.some(account => account.email === emailToCheck);
+            
+            if (isDeleted) {
+              // Clear authentication for deleted account
+              await AsyncStorage.removeItem("isAuthenticated");
+              await AsyncStorage.removeItem("profileEmail");
+              await AsyncStorage.removeItem("profileName");
+              await AsyncStorage.removeItem("profilePhone");
+              setIsAuthenticated(false);
+              setProfileEmail("");
+              setProfileName("");
+              setProfilePhone("");
+            } else {
+              setIsAuthenticated(true);
+            }
+          } else {
+            setIsAuthenticated(true);
+          }
+        }
+      }
+      
+      setIsCheckingAuth(false);
     };
     loadData();
   }, []);
@@ -179,6 +216,117 @@ function AppContent({ isChatActive }) {
       AsyncStorage.setItem("profileEmoji", profileEmoji);
     }
   }, [profileEmoji]);
+
+  // Authentication handlers
+  const handleSignIn = async (credentials) => {
+    try {
+      // Check if this email was previously deleted
+      const emailToCheck = credentials.email.toLowerCase();
+      const deletedAccountsData = await AsyncStorage.getItem("@deleted_accounts");
+      
+      if (deletedAccountsData) {
+        const deletedAccounts = JSON.parse(deletedAccountsData);
+        const isDeleted = deletedAccounts.some(account => account.email === emailToCheck);
+        
+        if (isDeleted) {
+          throw new Error("This account has been permanently deleted and cannot be restored. Please create a new account.");
+        }
+      }
+      
+      // Validate password
+      const storedPasswordHash = await AsyncStorage.getItem(`password_${emailToCheck}`);
+      if (!storedPasswordHash) {
+        throw new Error("Account not found. Please check your email or create a new account.");
+      }
+      
+      const providedPasswordHash = btoa(credentials.password);
+      if (storedPasswordHash !== providedPasswordHash) {
+        throw new Error("Invalid password. Please check your password and try again.");
+      }
+      
+      // Load user data after successful authentication
+      const savedProfileName = await AsyncStorage.getItem("profileName");
+      const savedProfilePhone = await AsyncStorage.getItem("profilePhone");
+      const savedProfileEmoji = await AsyncStorage.getItem("profileEmoji");
+      
+      // Set user data
+      setProfileEmail(credentials.email);
+      if (savedProfileName) setProfileName(savedProfileName);
+      if (savedProfilePhone) setProfilePhone(savedProfilePhone);
+      if (savedProfileEmoji) setProfileEmoji(savedProfileEmoji);
+      
+      setIsAuthenticated(true);
+      await AsyncStorage.setItem("isAuthenticated", JSON.stringify(true));
+      await AsyncStorage.setItem("profileEmail", credentials.email);
+    } catch (error) {
+      throw new Error(error.message || "Failed to sign in. Please try again.");
+    }
+  };
+
+  const handleSignUp = async (userData, bypassDeletedCheck = false) => {
+    try {
+      // Check if this email was previously deleted and warn user (unless bypassing)
+      if (!bypassDeletedCheck) {
+        const emailToCheck = userData.email.toLowerCase();
+        const deletedAccountsData = await AsyncStorage.getItem("@deleted_accounts");
+        
+        if (deletedAccountsData) {
+          const deletedAccounts = JSON.parse(deletedAccountsData);
+          const wasDeleted = deletedAccounts.find(account => account.email === emailToCheck);
+          
+          if (wasDeleted) {
+            // Show warning but don't remove from deleted list yet
+            throw new Error("INFO_DELETED_ACCOUNT_RECREATION: You previously deleted an account with this email. Creating a new account will start fresh with no previous data.");
+          }
+        }
+      }
+      
+      // If we reach here, either no deleted account found or user confirmed recreation
+      // Remove email from deleted accounts list if it exists
+      const emailToCheck = userData.email.toLowerCase();
+      const deletedAccountsData = await AsyncStorage.getItem("@deleted_accounts");
+      if (deletedAccountsData) {
+        const deletedAccounts = JSON.parse(deletedAccountsData);
+        const updatedDeletedAccounts = deletedAccounts.filter(account => account.email !== emailToCheck);
+        await AsyncStorage.setItem("@deleted_accounts", JSON.stringify(updatedDeletedAccounts));
+      }
+      
+      // Store user data
+      setProfileName(userData.name);
+      setProfileEmail(userData.email);
+      setProfilePhone(userData.phone);
+      setProfileEmoji(userData.emoji);
+      setIsAuthenticated(true);
+      
+      await AsyncStorage.setItem("isAuthenticated", JSON.stringify(true));
+      await AsyncStorage.setItem("profileName", userData.name);
+      await AsyncStorage.setItem("profileEmail", userData.email);
+      await AsyncStorage.setItem("profilePhone", userData.phone);
+      await AsyncStorage.setItem("profileEmoji", userData.emoji);
+      
+      // Store password hash for authentication 
+      // TODO: Use proper hashing like bcrypt in production
+      const passwordHash = btoa(userData.password);
+      await AsyncStorage.setItem(`password_${userData.email.toLowerCase()}`, passwordHash);
+    } catch (error) {
+      throw new Error(error.message || "Failed to create account. Please try again.");
+    }
+  };
+
+  const handleSignOut = async () => {
+    setIsAuthenticated(false);
+    await AsyncStorage.setItem("isAuthenticated", JSON.stringify(false));
+  };
+
+  const handleDataReset = () => {
+    // Clear all app state data
+    setBills([]);
+    setFriends([]);
+    setProfileName("");
+    setProfileEmail("");
+    setProfilePhone("");
+    setProfileEmoji("👤");
+  };
 
   const addBill = (bill) => setBills((prev) => [...prev, bill]);
   const deleteBill = (id) =>
@@ -308,11 +456,11 @@ function AppContent({ isChatActive }) {
                   color={
                     isActive
                       ? darkMode
-                        ? "#D69E2E"
-                        : "#007AFF"
+                        ? Colors.text.accent.dark
+                        : Colors.primary
                       : darkMode
-                      ? "#8E8E93"
-                      : "#8E8E93"
+                      ? Colors.text.secondary.dark
+                      : Colors.text.secondary.light
                   }
                   style={{
                     transform: [{ scale: isActive ? 1.2 : 1 }],
@@ -325,11 +473,11 @@ function AppContent({ isChatActive }) {
                     fontWeight: "600",
                     color: isActive
                       ? darkMode
-                        ? "#D69E2E"
-                        : "#007AFF"
+                        ? Colors.text.accent.dark
+                        : Colors.primary
                       : darkMode
-                      ? "#8E8E93"
-                      : "#8E8E93",
+                      ? Colors.text.secondary.dark
+                      : Colors.text.secondary.light,
                     opacity: isActive ? 1 : 0.8,
                   }}
                 >
@@ -342,6 +490,43 @@ function AppContent({ isChatActive }) {
       </View>
     );
   };
+
+  // Show loading while checking authentication
+  if (isCheckingAuth) {
+    return (
+      <View style={{ 
+        flex: 1, 
+        justifyContent: 'center', 
+        alignItems: 'center',
+        backgroundColor: darkMode ? Colors.background.dark : Colors.background.light
+      }}>
+        <Text style={{ 
+          fontSize: 24, 
+          fontWeight: '700',
+          color: darkMode ? Colors.text.accent.dark : Colors.primary,
+          marginBottom: 16
+        }}>
+          💰 Bill Buddy
+        </Text>
+        <Text style={{ 
+          color: darkMode ? Colors.text.secondary.dark : Colors.text.secondary.light 
+        }}>
+          Loading...
+        </Text>
+      </View>
+    );
+  }
+
+  // Show authentication screen if not authenticated
+  if (!isAuthenticated) {
+    return (
+      <AuthScreen 
+        onSignIn={handleSignIn}
+        onSignUp={handleSignUp}
+        darkMode={darkMode}
+      />
+    );
+  }
 
   return (
     <Tab.Navigator
@@ -425,6 +610,8 @@ function AppContent({ isChatActive }) {
             setDarkMode={setDarkMode}
             liquidGlassMode={liquidGlassMode}
             setLiquidGlassMode={setLiquidGlassMode}
+            onSignOut={handleSignOut}
+            onDataReset={handleDataReset}
             onTabPress={(resetHandler) =>
               registerScreenResetHandler("Profile", resetHandler)
             }

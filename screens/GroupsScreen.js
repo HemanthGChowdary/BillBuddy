@@ -26,6 +26,7 @@ import { Ionicons } from "@expo/vector-icons";
 import PropTypes from "prop-types";
 import * as Crypto from "expo-crypto";
 import { getCurrencySymbol, getWordCount } from "../utils/helpers";
+import { Colors, Typography, Spacing, BorderRadius } from "../styles/theme";
 
 // Constants for better maintainability
 const CONSTANTS = {
@@ -140,7 +141,7 @@ class GroupsErrorBoundary extends React.Component {
           }}
         >
           <View style={{ alignItems: "center" }}>
-            <Ionicons name="warning-outline" size={64} color="#EF4444" />
+            <Ionicons name="warning-outline" size={64} color={Colors.error.light} />
             <Text
               style={{
                 fontSize: 18,
@@ -154,7 +155,7 @@ class GroupsErrorBoundary extends React.Component {
             <Text
               style={{
                 fontSize: 14,
-                color: "#666",
+                color: Colors.text.secondary.light,
                 marginTop: 8,
                 textAlign: "center",
               }}
@@ -164,7 +165,7 @@ class GroupsErrorBoundary extends React.Component {
             <TouchableOpacity
               onPress={() => this.setState({ hasError: false, error: null })}
               style={{
-                backgroundColor: "#007AFF",
+                backgroundColor: Colors.info.light,
                 paddingHorizontal: 20,
                 paddingVertical: 10,
                 borderRadius: 8,
@@ -257,7 +258,7 @@ const GroupCard = React.memo(
               <Ionicons
                 name="people"
                 size={16}
-                color={darkMode ? "#A0AEC0" : "#6B7280"}
+                color={darkMode ? Colors.text.secondary.dark : Colors.text.secondary.light}
               />
               <Text style={[styles.statLabel, darkMode && styles.darkSubtext]}>
                 Members
@@ -273,7 +274,7 @@ const GroupCard = React.memo(
               <Ionicons
                 name="receipt"
                 size={16}
-                color={darkMode ? "#A0AEC0" : "#6B7280"}
+                color={darkMode ? Colors.text.secondary.dark : Colors.text.secondary.light}
               />
               <Text style={[styles.statLabel, darkMode && styles.darkSubtext]}>
                 Bills
@@ -1204,9 +1205,9 @@ function GroupsScreen({
     <View style={styles.emptyContainer}>
       <View style={[styles.emptyIcon, darkMode && styles.darkEmptyIcon]}>
         <Ionicons
-          name="people-outline"
+          name="people-circle-outline"
           size={64}
-          color={darkMode ? "#4A5568" : "#D1D5DB"}
+          color={darkMode ? Colors.gray600 : Colors.gray300}
         />
       </View>
       <Text style={[styles.emptyTitle, darkMode && styles.darkText]}>
@@ -1246,7 +1247,7 @@ function GroupsScreen({
         <View style={styles.loadingContainer}>
           <ActivityIndicator
             size="large"
-            color={darkMode ? "#D69E2E" : "#8B4513"}
+            color={darkMode ? Colors.text.accent.dark : Colors.primary}
           />
           <Text style={[styles.loadingText, darkMode && styles.darkText]}>
             Loading groups...
@@ -1263,7 +1264,7 @@ function GroupsScreen({
       >
         <StatusBar
           barStyle={darkMode ? "light-content" : "dark-content"}
-          backgroundColor={darkMode ? "#1A202C" : "#EFE4D2"}
+          backgroundColor={darkMode ? Colors.background.dark : Colors.background.light}
         />
         {/* Header */}
         <View style={styles.header}>
@@ -1467,7 +1468,7 @@ function GroupsScreen({
                   <Ionicons
                     name="close"
                     size={24}
-                    color={darkMode ? "#E2E8F0" : "#374151"}
+                    color={darkMode ? Colors.text.primary.dark : Colors.text.primary.light}
                   />
                 </Pressable>
               </View>
@@ -1799,7 +1800,7 @@ function GroupsScreen({
                   <Ionicons
                     name="close"
                     size={24}
-                    color={darkMode ? "#E2E8F0" : "#374151"}
+                    color={darkMode ? Colors.text.primary.dark : Colors.text.primary.light}
                   />
                 </Pressable>
               </View>
@@ -2130,7 +2131,7 @@ function GroupsScreen({
                     <Ionicons
                       name="add"
                       size={16}
-                      color={darkMode ? "#D69E2E" : "#8B4513"}
+                      color={darkMode ? Colors.text.accent.dark : Colors.primary}
                     />
                     <Text
                       style={[
@@ -2151,7 +2152,7 @@ function GroupsScreen({
                     <Ionicons
                       name="close"
                       size={24}
-                      color={darkMode ? "#E2E8F0" : "#374151"}
+                      color={darkMode ? Colors.text.primary.dark : Colors.text.primary.light}
                     />
                   </TouchableOpacity>
                 </View>
@@ -2174,7 +2175,7 @@ function GroupsScreen({
                       <Ionicons
                         name="people"
                         size={20}
-                        color={darkMode ? "#D69E2E" : "#8B4513"}
+                        color={darkMode ? Colors.text.accent.dark : Colors.primary}
                       />
                       <Text
                         style={[
@@ -2197,7 +2198,7 @@ function GroupsScreen({
                       <Ionicons
                         name="receipt"
                         size={20}
-                        color={darkMode ? "#D69E2E" : "#8B4513"}
+                        color={darkMode ? Colors.text.accent.dark : Colors.primary}
                       />
                       <Text
                         style={[
@@ -2220,7 +2221,7 @@ function GroupsScreen({
                       <Ionicons
                         name="cash"
                         size={20}
-                        color={darkMode ? "#D69E2E" : "#8B4513"}
+                        color={darkMode ? Colors.text.accent.dark : Colors.primary}
                       />
                       <Text
                         style={[
@@ -2370,6 +2371,19 @@ function GroupsScreen({
                                 </Text>
                                 <Text
                                   style={[
+                                    styles.expenseAmount,
+                                    darkMode && styles.darkAmount,
+                                  ]}
+                                >
+                                  {getCurrencySymbol(
+                                    bill.currency ||
+                                      selectedGroup?.currency ||
+                                      "USD"
+                                  )}
+                                  {(bill.amount || 0).toFixed(2)}
+                                </Text>
+                                <Text
+                                  style={[
                                     styles.expenseDetail,
                                     darkMode && styles.darkSubtext,
                                   ]}
@@ -2377,109 +2391,61 @@ function GroupsScreen({
                                   Paid by {bill.payer || "Unknown"}
                                 </Text>
                               </View>
-                              <Text
-                                style={[
-                                  styles.expenseAmount,
-                                  darkMode && styles.darkAmount,
-                                ]}
-                              >
-                                {getCurrencySymbol(
-                                  bill.currency ||
-                                    selectedGroup?.currency ||
-                                    "USD"
-                                )}
-                                {(bill.amount || 0).toFixed(2)}
-                              </Text>
-                            </View>
-
-                            {/* Who Owes Who Section */}
-                            {bill.splitWith && bill.splitWith.length > 0 && (
-                              <View
-                                style={[
-                                  styles.splitDetails,
-                                  darkMode && styles.darkSplitDetails,
-                                ]}
-                              >
+                              <View style={styles.expenseDateContainer}>
                                 <Text
                                   style={[
-                                    styles.splitTitle,
+                                    styles.expenseDate,
                                     darkMode && styles.darkSubtext,
                                   ]}
                                 >
-                                  Split between:
+                                  {new Date(
+                                    bill.date || bill.createdAt
+                                  ).toLocaleDateString()}
                                 </Text>
-                                <View style={styles.splitList}>
-                                  {bill.splitWith.map((person, index) => {
-                                    const shareAmount =
-                                      (bill.amount || 0) /
-                                      bill.splitWith.length;
-                                    const owesAmount =
-                                      person === bill.payer ? 0 : shareAmount;
-                                    return (
-                                      <View
-                                        key={index}
-                                        style={styles.splitItem}
-                                      >
-                                        <Text
-                                          style={[
-                                            styles.splitPerson,
-                                            darkMode && styles.darkText,
-                                          ]}
-                                        >
-                                          {person === you
-                                            ? `${person} (You)`
-                                            : person}
-                                        </Text>
-                                        {owesAmount > 0 && (
-                                          <Text
-                                            style={[
-                                              styles.owesAmount,
-                                              { color: "#F44336" },
-                                            ]}
-                                          >
-                                            owes{" "}
-                                            {getCurrencySymbol(
-                                              bill.currency || "USD"
-                                            )}
-                                            {owesAmount.toFixed(2)}
-                                          </Text>
-                                        )}
-                                        {owesAmount === 0 && (
-                                          <Text
-                                            style={[
-                                              styles.owesAmount,
-                                              { color: "#4CAF50" },
-                                            ]}
-                                          >
-                                            paid
-                                          </Text>
-                                        )}
-                                      </View>
-                                    );
-                                  })}
-                                </View>
                               </View>
-                            )}
+                            </View>
 
-                            <View style={styles.expenseFooter}>
-                              <Text
-                                style={[
-                                  styles.expenseDate,
-                                  darkMode && styles.darkSubtext,
-                                ]}
-                              >
-                                {new Date(
-                                  bill.date || bill.createdAt
-                                ).toLocaleDateString()}
-                              </Text>
+                            {/* Clean Details Section like HistoryScreen */}
+                            <View style={styles.billDetails}>
+                              <View style={styles.billDetailRow}>
+                                <Ionicons
+                                  name="people"
+                                  size={16}
+                                  color="#CBD5E0"
+                                />
+                                <Text
+                                  style={styles.billDetailText}
+                                >
+                                  {bill.splitWith && bill.splitWith.length > 1 
+                                    ? `Split with ${bill.splitWith.filter(p => p !== bill.payer).join(' & ')}`
+                                    : 'No split'
+                                  }
+                                </Text>
+                              </View>
 
-                              {/* Edit and Delete buttons - Only show if current user is the payer */}
+                              <View style={styles.billDetailRow}>
+                                <Text
+                                  style={styles.splitTypeIndicator}
+                                >
+                                  {bill.splitType === "custom" ? "💰 Custom split" : "⚖️ Equal split"}
+                                </Text>
+                              </View>
+                            </View>
+
+                            {/* Edit and Delete buttons - Only show if current user is the payer */}
                               {bill.payer === you && (
                                 <View style={styles.expenseActions}>
                                   <Pressable
                                     style={({ pressed }) => [
                                       styles.expenseActionButton,
-                                      styles.editExpenseButton,
+                                      {
+                                        backgroundColor: darkMode 
+                                          ? Colors.edit.background.dark 
+                                          : Colors.edit.background.light,
+                                        borderColor: darkMode 
+                                          ? Colors.edit.border.dark 
+                                          : Colors.edit.border.light,
+                                      },
                                       pressed && { opacity: 0.7 },
                                     ]}
                                     onPress={() => {
@@ -2487,7 +2453,16 @@ function GroupsScreen({
                                       handleEditExpense(bill, selectedGroup);
                                     }}
                                   >
-                                    <Text style={styles.editExpenseText}>
+                                    <Ionicons 
+                                      name="pencil" 
+                                      size={14} 
+                                      color={darkMode ? Colors.edit.text.dark : Colors.edit.text.light}
+                                      style={{ marginRight: 4 }}
+                                    />
+                                    <Text style={[
+                                      styles.editExpenseText,
+                                      { color: darkMode ? Colors.edit.text.dark : Colors.edit.text.light }
+                                    ]}>
                                       Edit
                                     </Text>
                                   </Pressable>
@@ -2495,7 +2470,14 @@ function GroupsScreen({
                                   <Pressable
                                     style={({ pressed }) => [
                                       styles.expenseActionButton,
-                                      styles.deleteExpenseButton,
+                                      {
+                                        backgroundColor: darkMode 
+                                          ? Colors.delete.background.dark 
+                                          : Colors.delete.background.light,
+                                        borderColor: darkMode 
+                                          ? Colors.delete.border.dark 
+                                          : Colors.delete.border.light,
+                                      },
                                       pressed && { opacity: 0.7 },
                                     ]}
                                     onPress={() => {
@@ -2549,13 +2531,21 @@ function GroupsScreen({
                                       );
                                     }}
                                   >
-                                    <Text style={styles.deleteExpenseText}>
+                                    <Ionicons 
+                                      name="trash" 
+                                      size={14} 
+                                      color={darkMode ? Colors.delete.text.dark : Colors.delete.text.light}
+                                      style={{ marginRight: 4 }}
+                                    />
+                                    <Text style={[
+                                      styles.deleteExpenseText,
+                                      { color: darkMode ? Colors.delete.text.dark : Colors.delete.text.light }
+                                    ]}>
                                       Delete
                                     </Text>
                                   </Pressable>
                                 </View>
                               )}
-                            </View>
 
                             {bill.note && (
                               <Text
@@ -2636,7 +2626,7 @@ function GroupsScreen({
                   <Ionicons
                     name="close"
                     size={24}
-                    color={darkMode ? "#E2E8F0" : "#374151"}
+                    color={darkMode ? Colors.text.primary.dark : Colors.text.primary.light}
                   />
                 </TouchableOpacity>
               </View>
@@ -3198,7 +3188,7 @@ function GroupsScreen({
                   <Ionicons
                     name="close"
                     size={24}
-                    color={darkMode ? "#E2E8F0" : "#374151"}
+                    color={darkMode ? Colors.text.primary.dark : Colors.text.primary.light}
                   />
                 </TouchableOpacity>
               </View>
@@ -3748,7 +3738,7 @@ function GroupsScreen({
                   <Ionicons
                     name="close"
                     size={24}
-                    color={darkMode ? "#E2E8F0" : "#374151"}
+                    color={darkMode ? Colors.text.primary.dark : Colors.text.primary.light}
                   />
                 </TouchableOpacity>
               </View>
@@ -3898,7 +3888,7 @@ function GroupsScreen({
                   <Ionicons
                     name="close"
                     size={24}
-                    color={darkMode ? "#E2E8F0" : "#374151"}
+                    color={darkMode ? Colors.text.primary.dark : Colors.text.primary.light}
                   />
                 </TouchableOpacity>
               </View>
@@ -4304,13 +4294,13 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
   darkText: {
-    color: "#E2E8F0",
+    color: "#F7FAFC",
   },
   darkSubtext: {
-    color: "#A0AEC0",
+    color: "#CBD5E0",
   },
   darkAmount: {
-    color: "#4A90E2",
+    color: "#F6E05E",
   },
 
   // Controls
@@ -4449,7 +4439,7 @@ const styles = StyleSheet.create({
   },
   clearFiltersText: {
     color: "#fff",
-    fontSize: 14,
+    fontSize: 16,
     fontWeight: "600",
     textAlign: "center",
   },
@@ -4705,7 +4695,7 @@ const styles = StyleSheet.create({
     color: "#6B7280",
     textAlign: "center",
     lineHeight: 22,
-    marginBottom: 20,
+    marginBottom: 2,
   },
   clearSearchButton: {
     backgroundColor: "#8B4513", // Brown theme
@@ -5125,33 +5115,40 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   expenseItem: {
-    backgroundColor: "#fff",
-    borderRadius: 12,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: "#E5E7EB",
+    backgroundColor: "#2D3748",
+    borderRadius: BorderRadius.xl,
+    padding: Spacing.xl,
+    shadowColor: Colors.black,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.4,
+    shadowRadius: 12,
+    elevation: 6,
+    marginBottom: Spacing.lg,
+    borderWidth: 0,
   },
   darkExpenseItem: {
-    backgroundColor: "#1A202C",
-    borderColor: "#4A5568",
+    backgroundColor: "#2D3748",
+    shadowOpacity: 0.4,
   },
   expenseHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "flex-start",
-    marginBottom: 8,
+    marginBottom: Spacing.lg,
   },
   expenseName: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#374151",
-    flex: 1,
-    marginRight: 12,
-  },
-  expenseAmount: {
     fontSize: 18,
     fontWeight: "700",
-    color: "#2356A8",
+    color: "#F7FAFC",
+    flex: 1,
+    marginRight: Spacing.lg,
+    marginBottom: Spacing.xs,
+  },
+  expenseAmount: {
+    fontSize: 20,
+    fontWeight: "800",
+    color: "#F6E05E",
+    marginBottom: Spacing.xs,
   },
   expenseDetails: {
     flexDirection: "row",
@@ -5160,18 +5157,47 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   expenseDetail: {
-    fontSize: 14,
-    color: "#6B7280",
+    fontSize: 15,
+    fontWeight: "500",
+    color: "#CBD5E0",
+  },
+  expenseDateContainer: {
+    alignItems: "flex-end",
   },
   expenseDate: {
-    fontSize: 12,
-    color: "#9CA3AF",
+    fontSize: 15,
+    fontWeight: "600",
+    color: "#CBD5E0",
+    textAlign: "right",
   },
   expenseNote: {
-    fontSize: 14,
-    color: "#6B7280",
+    ...Typography.textStyles.bodySmall,
+    color: Colors.text.secondary.light,
     fontStyle: "italic",
-    marginTop: 4,
+    marginTop: Spacing.xs,
+  },
+  billDetails: {
+    marginTop: Spacing.md,
+    marginBottom: Spacing.lg,
+  },
+  billDetailRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: Spacing.sm,
+    gap: Spacing.md,
+  },
+  billDetailText: {
+    fontSize: 15,
+    fontWeight: "500",
+    color: "#CBD5E0",
+    flex: 1,
+  },
+  splitTypeIndicator: {
+    fontSize: 13,
+    fontWeight: "500",
+    color: "#A0AEC0",
+    fontStyle: "italic",
+    marginTop: Spacing.xs,
   },
   moreExpensesText: {
     fontSize: 14,
@@ -5215,41 +5241,58 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "500",
   },
-  expenseFooter: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginTop: 8,
-  },
   expenseActions: {
     flexDirection: "row",
-    gap: 12,
+    gap: Spacing.md,
+    marginTop: Spacing.lg,
+    justifyContent: "flex-end",
   },
   expenseActionButton: {
-    flex: 1,
-    borderRadius: 8,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
+    flexDirection: "row",
+    borderRadius: BorderRadius.md,
+    paddingVertical: Spacing.md,
+    paddingHorizontal: Spacing.lg,
     alignItems: "center",
-    borderWidth: 1,
-  },
-  editExpenseButton: {
-    backgroundColor: "#F8F4E8",
-    borderColor: "#D4A574",
-  },
-  deleteExpenseButton: {
-    backgroundColor: "#FFEBEE",
-    borderColor: "#FFCDD2",
+    justifyContent: "center",
+    borderWidth: 1.5,
+    minHeight: 40,
+    flex: 1,
+    maxWidth: 100,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 3,
   },
   editExpenseText: {
     fontSize: 13,
-    color: "#8B4513",
-    fontWeight: "500",
+    fontWeight: "700",
+    lineHeight: 16,
   },
   deleteExpenseText: {
     fontSize: 13,
-    color: "#D32F2F",
-    fontWeight: "500",
+    fontWeight: "700",
+    lineHeight: 16,
+    color: Colors.delete.text.light,
+    fontWeight: "600",
+  },
+  // Dark mode button styles
+  darkExpenseActions: {
+    borderTopColor: Colors.gray600,
+  },
+  darkEditExpenseButton: {
+    backgroundColor: Colors.edit.background.dark,
+    borderColor: Colors.edit.border.dark,
+  },
+  darkDeleteExpenseButton: {
+    backgroundColor: Colors.delete.background.dark,
+    borderColor: Colors.delete.border.dark,
+  },
+  darkEditExpenseText: {
+    color: Colors.edit.text.dark,
+  },
+  darkDeleteExpenseText: {
+    color: Colors.delete.text.dark,
   },
   wordCountText: {
     fontSize: 12,

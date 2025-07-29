@@ -23,6 +23,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { Colors, Spacing, BorderRadius } from "../styles/theme";
 
 // Enhanced Friend Item Component with improved status indicator
 const FriendItem = React.memo(
@@ -51,17 +52,17 @@ const FriendItem = React.memo(
     };
 
     const getBalanceColor = (balance) => {
-      if (balance > 0) return "#4CAF50"; // Green: they owe you
-      if (balance < 0) return "#F44336"; // Red: you owe them
-      return darkMode ? "#9CA3AF" : "#757575"; // Gray: settled - adjusted for dark mode
+      if (balance > 0) return Colors.success.light; // Green: they owe you
+      if (balance < 0) return Colors.error.light; // Red: you owe them
+      return darkMode ? Colors.text.secondary.dark : Colors.text.secondary.light; // Gray: settled - adjusted for dark mode
     };
 
     // Enhanced avatar border color logic
     const getAvatarBorderColor = (balance) => {
-      if (Math.abs(balance) < 0.01) return "#4CAF50"; // Green for settled
-      if (balance > 0) return "#2196F3"; // Blue for they owe you
-      if (balance < 0) return "#FF9800"; // Orange for you owe them
-      return darkMode ? "#4A5568" : "#e0e0e0"; // Default border
+      if (Math.abs(balance) < 0.01) return Colors.success.light; // Green for settled
+      if (balance > 0) return Colors.info.light; // Blue for they owe you
+      if (balance < 0) return Colors.warning.light; // Orange for you owe them
+      return darkMode ? Colors.gray600 : Colors.gray300; // Default border
     };
 
     // Get online status (you can replace this with actual online status logic)
@@ -72,7 +73,7 @@ const FriendItem = React.memo(
     };
 
     const getStatusColor = () => {
-      return getOnlineStatus() ? "#4CAF50" : "#9E9E9E"; // Green for online, gray for offline
+      return getOnlineStatus() ? Colors.success.light : Colors.gray500; // Green for online, gray for offline
     };
 
     const getStatusText = () => {
@@ -82,14 +83,14 @@ const FriendItem = React.memo(
     return (
       <Animated.View
         style={{
-          backgroundColor: darkMode ? "#2D3748" : "#FFFFFF",
-          borderRadius: 20,
-          padding: 20,
-          marginBottom: 16,
+          backgroundColor: darkMode ? Colors.background.card.dark : Colors.background.card.light,
+          borderRadius: BorderRadius.xl,
+          padding: Spacing.xl,
+          marginBottom: Spacing.lg,
           marginHorizontal: 4,
-          borderColor: darkMode ? "#4A5568" : "#e0e0e0",
+          borderColor: darkMode ? Colors.gray600 : Colors.gray300,
           borderWidth: 1,
-          shadowColor: darkMode ? "#000000" : "#000000",
+          shadowColor: Colors.black,
           shadowOffset: { width: 0, height: 3 },
           shadowOpacity: darkMode ? 0.4 : 0.1,
           shadowRadius: 12,
@@ -118,7 +119,7 @@ const FriendItem = React.memo(
                   width: 60,
                   height: 60,
                   borderRadius: 30,
-                  backgroundColor: darkMode ? "#4A5568" : "#EFE4D2",
+                  backgroundColor: darkMode ? Colors.gray600 : Colors.background.light,
                   justifyContent: "center",
                   alignItems: "center",
                   borderWidth: 3,
@@ -1062,6 +1063,13 @@ const FriendsScreen = ({
     [formErrors.name]
   );
 
+  // Clear all filters function
+  const clearFilters = useCallback(() => {
+    setSearchQuery("");
+    setFilterBy("all");
+    setSortBy("name");
+  }, []);
+
   const renderFriendItem = useCallback(
     ({ item }) => (
       <FriendItem
@@ -1150,7 +1158,7 @@ const FriendsScreen = ({
     <SafeAreaView style={{ flex: 1, backgroundColor: theme.background }}>
       <StatusBar
         barStyle={darkMode ? "light-content" : "dark-content"}
-        backgroundColor={darkMode ? "#1A202C" : "#EFE4D2"}
+        backgroundColor={darkMode ? Colors.background.dark : Colors.background.light}
       />
       <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
         <View style={{ flex: 1 }}>
@@ -1538,48 +1546,68 @@ const FriendsScreen = ({
             }}
             ListEmptyComponent={
               <View
-                style={{ alignItems: "center", marginTop: 60, padding: 20 }}
+                style={{ alignItems: "center", marginTop: 10, padding: 20 }}
               >
-                <Text style={{ fontSize: 48, marginBottom: 16 }}>👥</Text>
+                <View style={{
+                  width: 100,
+                  height: 100,
+                  borderRadius: 50,
+                  backgroundColor: darkMode ? "#2D3748" : "#F3F4F6",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  marginBottom: 20,
+                }}>
+                  <Ionicons
+                    name="people-outline"
+                    size={64}
+                    color={darkMode ? Colors.gray600 : Colors.gray300}
+                  />
+                </View>
                 <Text
                   style={{
                     textAlign: "center",
-                    color: theme.textSecondary,
-                    fontSize: 18,
+                    color: "#374151",
+                    fontSize: 20,
+                                      alignItems: "center",
+                  justifyContent: "center",
                     fontWeight: "500",
                     marginBottom: 8,
                   }}
                 >
-                  {searchQuery ? "No friends found" : "No friends yet"}
+                  {searchQuery || filterBy !== "all" || sortBy !== "name"
+                    ? "No friends found" 
+                    : "No friends yet"}
                 </Text>
                 <Text
                   style={{
                     textAlign: "center",
-                    color: theme.textTertiary,
-                    fontSize: 14,
+                    color: "#6B7280",
+                    fontSize: 16,
                     marginBottom: 20,
+                    alignItems: "center",
+                    justifyContent: "center",
                   }}
                 >
-                  {searchQuery
-                    ? "Try a different search term"
+                  {searchQuery || filterBy !== "all" || sortBy !== "name"
+                    ? "Try adjusting your search or filters"
                     : "Add some friends to start splitting expenses!"}
                 </Text>
-                {!searchQuery && (
+                {(searchQuery || filterBy !== "all" || sortBy !== "name") && (
                   <Pressable
-                    onPress={() => setShowAddModal(true)}
+                    onPress={clearFilters}
                     style={({ pressed }) => ({
                       backgroundColor: pressed
                         ? theme.primaryPressed
                         : theme.primary,
-                      borderRadius: 12,
-                      paddingHorizontal: 24,
+                      borderRadius: 8,
+                      paddingHorizontal: 20,
                       paddingVertical: 12,
                     })}
                   >
                     <Text
                       style={{ color: "#fff", fontWeight: "600", fontSize: 16 }}
                     >
-                      Add Your First Friend
+                      Clear Filters
                     </Text>
                   </Pressable>
                 )}
@@ -1994,52 +2022,52 @@ const styles = StyleSheet.create({
     opacity: 0.7,
   },
   inviteButton: {
-    backgroundColor: "#F1F8E9",
-    borderColor: "#C8E6C9",
+    backgroundColor: Colors.invite.background.light,
+    borderColor: Colors.invite.border.light,
   },
   darkInviteButton: {
-    backgroundColor: "#2D4A34",
-    borderColor: "#4CAF50",
+    backgroundColor: Colors.invite.background.dark,
+    borderColor: Colors.invite.border.dark,
   },
   editButton: {
-    backgroundColor: "#F8F4E8",
-    borderColor: "#D4A574",
+    backgroundColor: Colors.edit.background.light,
+    borderColor: Colors.edit.border.light,
   },
   darkEditButton: {
-    backgroundColor: "#3D3D3D",
-    borderColor: "#D69E2E",
+    backgroundColor: Colors.edit.background.dark,
+    borderColor: Colors.edit.border.dark,
   },
   deleteButton: {
-    backgroundColor: "#FFF5F5",
-    borderColor: "#FFCDD2",
+    backgroundColor: Colors.delete.background.light,
+    borderColor: Colors.delete.border.light,
   },
   darkDeleteButton: {
-    backgroundColor: "#4A2D32",
-    borderColor: "#F44336",
+    backgroundColor: Colors.delete.background.dark,
+    borderColor: Colors.delete.border.dark,
   },
   inviteButtonText: {
     fontSize: 13,
-    color: "#388E3C",
+    color: Colors.invite.text.light,
     fontWeight: "500",
   },
   darkInviteButtonText: {
-    color: "#81C784",
+    color: Colors.invite.text.dark,
   },
   editButtonText: {
     fontSize: 13,
-    color: "#8B4513",
+    color: Colors.edit.text.light,
     fontWeight: "500",
   },
   darkEditButtonText: {
-    color: "#D69E2E",
+    color: Colors.edit.text.dark,
   },
   deleteButtonText: {
     fontSize: 13,
-    color: "#D32F2F",
+    color: Colors.delete.text.light,
     fontWeight: "500",
   },
   darkDeleteButtonText: {
-    color: "#EF5350",
+    color: Colors.delete.text.dark,
   },
 });
 

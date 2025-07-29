@@ -17,17 +17,18 @@ import {
   ActionSheetIOS,
   StatusBar,
 } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import DropDownPicker from "react-native-dropdown-picker";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import * as ImagePicker from "expo-image-picker";
 import PropTypes from "prop-types";
+import { Colors, Typography, Spacing, BorderRadius } from "../styles/theme";
 
 function ProfileScreen({
   profileName,
   setProfileName,
   profileEmoji,
-  setProfileEmoji,
   profileEmail,
   setProfileEmail,
   profilePhone,
@@ -36,10 +37,13 @@ function ProfileScreen({
   setDarkMode,
   liquidGlassMode,
   setLiquidGlassMode,
+  onSignOut, // Function to handle sign out
   onTabPress, // Function to be called on tab press
+  onNavigateToSignUp, // Function to navigate to sign up screen
+  navigation, // Navigation object for fallback
 }) {
   const insets = useSafeAreaInsets();
-  const navigationSpacing = Math.max(insets.bottom, 20) + 10 + 10;
+  const navigationSpacing = Math.max(insets.bottom, 20) + 10 + 40;
 
   // Navigation state
   const [currentTab, setCurrentTab] = useState("main"); // main, personal, security, notifications, feedback
@@ -70,6 +74,25 @@ function ProfileScreen({
   const [showPasswordSection, setShowPasswordSection] = useState(false);
   const [twoFactorAuth, setTwoFactorAuth] = useState(false);
 
+  // Two-Factor Authentication states
+  const [twoFactorStep, setTwoFactorStep] = useState("setup"); // setup, verify, enabled
+  const [verificationCode, setVerificationCode] = useState("");
+  const [sentCode, setSentCode] = useState("");
+  const [isVerifyingCode, setIsVerifyingCode] = useState(false);
+  const [codeTimer, setCodeTimer] = useState(0);
+  const [timerRef, setTimerRef] = useState(null);
+
+  // Password validation states
+  const [passwordStrength, setPasswordStrength] = useState({
+    score: 0,
+    feedback: [],
+    isValid: false,
+  });
+  const [realTimePasswordErrors, setRealTimePasswordErrors] = useState({});
+
+  // Account deletion flag
+  const [isAccountDeleted, setIsAccountDeleted] = useState(false);
+
   // User preferences - load from user data
   const [userSettings, setUserSettings] = useState({
     emailNotifications: true,
@@ -82,47 +105,98 @@ function ProfileScreen({
     loadUserSettings();
     loadProfileData();
     loadCurrentUser();
+    loadProfileImage();
+    loadTwoFactorStatus();
+
+    // Cleanup timer on unmount
+    return () => {
+      if (timerRef) {
+        clearInterval(timerRef);
+      }
+    };
   }, []);
+
+  // Load two-factor authentication status
+  const loadTwoFactorStatus = async () => {
+    try {
+      if (isAccountDeleted) return; // Don't load if account was deleted
+
+      const twoFactorEnabled = await AsyncStorage.getItem(
+        "@two_factor_enabled"
+      );
+      if (twoFactorEnabled === "true") {
+        setTwoFactorAuth(true);
+        setTwoFactorStep("enabled");
+      }
+    } catch (error) {
+      // Error loading 2FA status - continue with defaults
+    }
+  };
 
   const loadCurrentUser = async () => {
     try {
-      // For UI testing - check if we have a mock user
-      const mockUser = {
-        id: "test_user_123",
-        name: profileName || "Test User",
-        email: profileEmail || "test@example.com",
-        phone: phone || "",
-        profileImage: profileImage,
-      };
+      if (isAccountDeleted) return; // Don't load if account was deleted
 
-      // Only set if we have actual profile data
-      if (profileName && profileEmail) {
-        setCurrentUser(mockUser);
+      const savedUser = await AsyncStorage.getItem("@current_user");
+      if (savedUser) {
+        setCurrentUser(JSON.parse(savedUser));
+      } else if (profileName && profileEmail) {
+        // Create user from profile data if available
+        const userData = {
+          id: Date.now().toString(),
+          name: profileName,
+          email: profileEmail,
+          phone: phone || "",
+          profileImage: profileImage,
+          createdAt: new Date().toISOString(),
+        };
+        setCurrentUser(userData);
       }
     } catch (error) {
-      // Error handled silently
+      // Continue without user data
     }
   };
 
   const loadUserSettings = async () => {
     try {
-      // For UI testing - use default settings
+      if (isAccountDeleted) return; // Don't load if account was deleted
+
+      const savedSettings = await AsyncStorage.getItem("@user_settings");
+      if (savedSettings) {
+        setUserSettings(JSON.parse(savedSettings));
+      } else {
+        // Default settings for new users
+        const defaultSettings = {
+          emailNotifications: true,
+          pushNotifications: true,
+          smsNotifications: false,
+        };
+        setUserSettings(defaultSettings);
+        await AsyncStorage.setItem(
+          "@user_settings",
+          JSON.stringify(defaultSettings)
+        );
+      }
+    } catch (error) {
+      // Fallback to default settings on error
       setUserSettings({
         emailNotifications: true,
         pushNotifications: true,
         smsNotifications: false,
       });
-    } catch (error) {
-      // Error handled silently
     }
   };
 
   const loadProfileData = async () => {
     try {
-      // For UI testing - no need to load from UserManager
-      // Profile data comes from props
+      // Profile data loaded from props and AsyncStorage
+      const savedProfile = await AsyncStorage.getItem("@profile_data");
+      if (savedProfile) {
+        // Profile data is managed by parent component props
+        // Data validation could be added here if needed
+      }
     } catch (error) {
-      // Error handled silently
+      // Continue with props-based profile data
     }
   };
 
@@ -151,6 +225,80 @@ function ProfileScreen({
   const validatePassword = (password) =>
     password.length >= 8 && /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/.test(password);
 
+  // Enhanced password validation with real-time feedback
+  const validatePasswordStrength = useCallback((password) => {
+    const checks = {
+      length: password.length >= 8,
+      uppercase: /[A-Z]/.test(password),
+      lowercase: /[a-z]/.test(password),
+      number: /\d/.test(password),
+      special: /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(password),
+    };
+
+    const score = Object.values(checks).filter(Boolean).length;
+    const feedback = [];
+
+    if (!checks.length) feedback.push("At least 8 characters");
+    if (!checks.uppercase) feedback.push("One uppercase letter");
+    if (!checks.lowercase) feedback.push("One lowercase letter");
+    if (!checks.number) feedback.push("One number");
+    if (!checks.special) feedback.push("One special character");
+
+    const strength = {
+      score,
+      feedback,
+      isValid: score >= 4,
+      level: score <= 2 ? "weak" : score <= 3 ? "medium" : "strong",
+    };
+
+    setPasswordStrength(strength);
+    return strength;
+  }, []);
+
+  // Generate random verification code
+  const generateVerificationCode = () => {
+    return Math.floor(100000 + Math.random() * 900000).toString();
+  };
+
+  // Send SMS verification code (simulated)
+  const sendVerificationCode = useCallback(async () => {
+    try {
+      setIsVerifyingCode(true);
+      const code = generateVerificationCode();
+      setSentCode(code);
+
+      // Simulate SMS sending delay
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+
+      // Start countdown timer
+      setCodeTimer(60);
+      const timer = setInterval(() => {
+        setCodeTimer((prev) => {
+          if (prev <= 1) {
+            clearInterval(timer);
+            setTimerRef(null);
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+      setTimerRef(timer);
+
+      Alert.alert(
+        "Verification Code Sent",
+        `A verification code has been sent to ${phone || profilePhone}`,
+        [{ text: "OK" }]
+      );
+    } catch (error) {
+      Alert.alert(
+        "Error",
+        "Failed to send verification code. Please try again."
+      );
+    } finally {
+      setIsVerifyingCode(false);
+    }
+  }, [phone, profilePhone]);
+
   // Input handlers with real-time validation
   const handleNameChange = useCallback(
     (text) => {
@@ -160,6 +308,65 @@ function ProfileScreen({
       }
     },
     [errors.name, setProfileName]
+  );
+
+  // Real-time password change handlers
+  const handleCurrentPasswordChange = useCallback(
+    (text) => {
+      setCurrentPassword(text);
+      const newErrors = { ...realTimePasswordErrors };
+      if (text.length === 0) {
+        newErrors.currentPassword = "Current password is required";
+      } else {
+        delete newErrors.currentPassword;
+      }
+      setRealTimePasswordErrors(newErrors);
+    },
+    [realTimePasswordErrors]
+  );
+
+  const handleNewPasswordChange = useCallback(
+    (text) => {
+      setNewPassword(text);
+      validatePasswordStrength(text);
+
+      const newErrors = { ...realTimePasswordErrors };
+      if (text.length === 0) {
+        newErrors.newPassword = "New password is required";
+      } else if (!validatePassword(text)) {
+        newErrors.newPassword = "Password must meet security requirements";
+      } else {
+        delete newErrors.newPassword;
+      }
+
+      // Check confirm password match if it exists
+      if (confirmPassword && text !== confirmPassword) {
+        newErrors.confirmPassword = "Passwords do not match";
+      } else if (confirmPassword && text === confirmPassword) {
+        delete newErrors.confirmPassword;
+      }
+
+      setRealTimePasswordErrors(newErrors);
+    },
+    [confirmPassword, realTimePasswordErrors, validatePasswordStrength]
+  );
+
+  const handleConfirmPasswordChange = useCallback(
+    (text) => {
+      setConfirmPassword(text);
+      const newErrors = { ...realTimePasswordErrors };
+
+      if (text.length === 0) {
+        newErrors.confirmPassword = "Please confirm your password";
+      } else if (text !== newPassword) {
+        newErrors.confirmPassword = "Passwords do not match";
+      } else {
+        delete newErrors.confirmPassword;
+      }
+
+      setRealTimePasswordErrors(newErrors);
+    },
+    [newPassword, realTimePasswordErrors]
   );
 
   const handleEmailChange = useCallback(
@@ -212,42 +419,115 @@ function ProfileScreen({
   const launchCamera = async () => {
     if (!(await requestPermissions())) return;
 
+    setIsLoading(true);
     try {
       const result = await ImagePicker.launchCameraAsync({
         mediaTypes: ["images"],
-        allowsEditing: true,
-        aspect: [1, 1],
-        quality: 0.8,
+        allowsEditing: false, // Disable editing to prevent zoom crashes
+        quality: 0.5, // Lower quality to prevent memory issues
+        allowsMultipleSelection: false,
+        exif: false,
+        base64: false,
       });
 
-      if (!result.canceled && result.assets?.[0]) {
+      if (result.canceled) {
+        return;
+      }
+
+      if (result.assets && result.assets.length > 0 && result.assets[0]?.uri) {
         const imageUri = result.assets[0].uri;
-        setProfileImage(imageUri);
-        await saveProfileImage(imageUri);
+
+        // Validate the URI before setting
+        if (typeof imageUri === "string" && imageUri.length > 0) {
+          setProfileImage(imageUri);
+          await saveProfileImage(imageUri);
+        }
       }
     } catch (error) {
-      Alert.alert("Error", "Unable to access camera. Please try again.");
+      // Handle specific types of errors
+      if (
+        error.message?.includes("memory") ||
+        error.message?.includes("Memory")
+      ) {
+        Alert.alert(
+          "Memory Error",
+          "Camera image processing failed. Please try again."
+        );
+      } else if (
+        error.message?.includes("permission") ||
+        error.message?.includes("Permission")
+      ) {
+        Alert.alert(
+          "Permission Error",
+          "Please allow camera access in Settings."
+        );
+      } else {
+        Alert.alert(
+          "Error",
+          `Unable to access camera: ${error.message || "Please try again."}`
+        );
+      }
+    } finally {
+      setIsLoading(false);
     }
   };
 
   const pickImage = async () => {
     if (!(await requestPermissions())) return;
 
+    setIsLoading(true);
     try {
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ["images"],
-        allowsEditing: true,
-        aspect: [1, 1],
-        quality: 0.8,
+        allowsEditing: false, // Disable editing to prevent zoom crashes
+        quality: 0.5, // Lower quality to prevent memory issues
+        allowsMultipleSelection: false,
+        exif: false,
+        base64: false,
+        selectionLimit: 1,
       });
 
-      if (!result.canceled && result.assets?.[0]) {
+      if (result.canceled) {
+        return;
+      }
+
+      if (result.assets && result.assets.length > 0 && result.assets[0]?.uri) {
         const imageUri = result.assets[0].uri;
-        setProfileImage(imageUri);
-        await saveProfileImage(imageUri);
+
+        // Validate the URI before setting
+        if (typeof imageUri === "string" && imageUri.length > 0) {
+          setProfileImage(imageUri);
+          await saveProfileImage(imageUri);
+        }
       }
     } catch (error) {
-      Alert.alert("Error", "Unable to access photo library. Please try again.");
+      // Handle specific types of errors
+      if (
+        error.message?.includes("memory") ||
+        error.message?.includes("Memory")
+      ) {
+        Alert.alert(
+          "Memory Error",
+          "The selected image is too large. Please try selecting a smaller image."
+        );
+      } else if (
+        error.message?.includes("permission") ||
+        error.message?.includes("Permission")
+      ) {
+        Alert.alert(
+          "Permission Error",
+          "Please allow access to your photo library in Settings."
+        );
+      } else {
+        Alert.alert(
+          "Error",
+          `Unable to access photo library: ${
+            error.message || "Please try again."
+          }`
+        );
+      }
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -297,73 +577,190 @@ function ProfileScreen({
 
   const saveProfileImage = async (imageUri) => {
     try {
-      // For UI testing - just save to local state
-      setProfileImage(imageUri);
+      if (imageUri) {
+        await AsyncStorage.setItem("@profile_image", imageUri);
+      } else {
+        await AsyncStorage.removeItem("@profile_image");
+      }
     } catch (error) {
-      // Error handled silently
+      // Error saving profile image - continue silently
     }
   };
 
-  // Sign in handler for UI testing
+  const loadProfileImage = async () => {
+    try {
+      if (isAccountDeleted) return; // Don't load if account was deleted
+
+      const savedImageUri = await AsyncStorage.getItem("@profile_image");
+      if (savedImageUri) {
+        setProfileImage(savedImageUri);
+      }
+    } catch (error) {
+      // Error loading profile image - continue without image
+    }
+  };
+
+  // Sign in handler
   const handleSignIn = useCallback(async () => {
     try {
       setIsLoading(true);
-      // For UI testing - simulate sign in
+
+      // Validate required fields before sign in
+      if (!profileName || !profileEmail) {
+        Alert.alert(
+          "Missing Information",
+          "Please complete your profile information before signing in."
+        );
+        return;
+      }
+      
+      // Check if this email was previously deleted
+      const emailToCheck = profileEmail.toLowerCase();
+      try {
+        const deletedAccountsData = await AsyncStorage.getItem("@deleted_accounts");
+        
+        if (deletedAccountsData) {
+          const deletedAccounts = JSON.parse(deletedAccountsData);
+          const isDeleted = deletedAccounts.some(account => account.email === emailToCheck);
+          
+          if (isDeleted) {
+            Alert.alert(
+              "Account Not Found",
+              "This account has been permanently deleted and cannot be restored. Please create a new account.",
+              [
+                { text: "OK" },
+                {
+                  text: "Create New Account",
+                  onPress: () => {
+                    // Clear the form for new account creation
+                    setProfileName("");
+                    setProfileEmail("");
+                    setPhone("");
+                    setProfileImage(null);
+                    if (onNavigateToSignUp) {
+                      onNavigateToSignUp();
+                    }
+                  }
+                }
+              ]
+            );
+            return;
+          }
+        }
+      } catch (error) {
+        // Continue with sign in if we can't check deleted accounts
+      }
+
       await new Promise((resolve) => setTimeout(resolve, 1000));
 
-      // Mock user data for UI testing
-      const mockUser = {
-        id: "test_user_123",
-        name: profileName || "Test User",
-        email: profileEmail || "test@example.com",
-        phone: phone || "+1-555-0123",
+      const userData = {
+        id: Date.now().toString(),
+        name: profileName,
+        email: profileEmail.toLowerCase(),
+        phone: phone || "",
         profileImage: profileImage,
+        createdAt: new Date().toISOString(),
       };
 
-      setCurrentUser(mockUser);
-      Alert.alert("Success", "Signed in successfully!");
+      setCurrentUser(userData);
+      Alert.alert("Welcome!", "You have successfully signed in.");
     } catch (error) {
       Alert.alert("Error", "Failed to sign in. Please try again.");
     } finally {
       setIsLoading(false);
     }
-  }, [profileName, profileEmail, phone, profileImage]);
+  }, [profileName, profileEmail, phone, profileImage, onNavigateToSignUp]);
 
-  // Two-factor authentication handler
-  const handleTwoFactorToggle = useCallback((value) => {
-    setTwoFactorAuth(value);
-    if (value) {
-      Alert.alert(
-        "Enable Two-Factor Authentication",
-        "You'll receive a verification code via SMS when logging in from new devices.",
-        [
-          { text: "Cancel", onPress: () => setTwoFactorAuth(false) },
-          {
-            text: "Enable",
-            onPress: () =>
-              Alert.alert("Success", "Two-factor authentication enabled!"),
-          },
-        ]
-      );
-    } else {
-      Alert.alert(
-        "Disable Two-Factor Authentication",
-        "Are you sure you want to disable this security feature?",
-        [
-          { text: "Cancel", onPress: () => setTwoFactorAuth(true) },
-          {
-            text: "Disable",
-            style: "destructive",
-            onPress: () =>
-              Alert.alert(
-                "Disabled",
-                "Two-factor authentication has been disabled."
-              ),
-          },
-        ]
-      );
+  // Enhanced two-factor authentication handler
+  const handleTwoFactorToggle = useCallback(
+    async (value) => {
+      if (value) {
+        // Enabling 2FA - start verification process
+        if (!phone && !profilePhone) {
+          Alert.alert(
+            "Phone Required",
+            "Please add a phone number to enable two-factor authentication.",
+            [{ text: "OK", onPress: () => setTwoFactorAuth(false) }]
+          );
+          return;
+        }
+
+        setTwoFactorStep("setup");
+        setTwoFactorAuth(true);
+        await sendVerificationCode();
+      } else {
+        // Disabling 2FA
+        Alert.alert(
+          "Disable Two-Factor Authentication",
+          "Are you sure you want to disable this security feature?",
+          [
+            { text: "Cancel", style: "cancel" },
+            {
+              text: "Disable",
+              style: "destructive",
+              onPress: async () => {
+                try {
+                  await AsyncStorage.removeItem("@two_factor_enabled");
+                  setTwoFactorAuth(false);
+                  setTwoFactorStep("setup");
+                  setVerificationCode("");
+                  setSentCode("");
+                  Alert.alert(
+                    "Disabled",
+                    "Two-factor authentication has been disabled."
+                  );
+                } catch (error) {
+                  // Error disabling 2FA - continue silently
+                }
+              },
+            },
+          ]
+        );
+      }
+    },
+    [phone, profilePhone, sendVerificationCode]
+  );
+
+  // Verify 2FA code
+  const verifyTwoFactorCode = useCallback(async () => {
+    if (verificationCode.length !== 6) {
+      Alert.alert("Invalid Code", "Please enter a 6-digit verification code.");
+      return;
     }
-  }, []);
+
+    setIsVerifyingCode(true);
+
+    try {
+      // Simulate verification delay
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+
+      if (verificationCode === sentCode) {
+        await AsyncStorage.setItem("@two_factor_enabled", "true");
+        setTwoFactorStep("enabled");
+        setVerificationCode("");
+        setSentCode("");
+
+        // Clear timer if active
+        if (timerRef) {
+          clearInterval(timerRef);
+          setTimerRef(null);
+          setCodeTimer(0);
+        }
+
+        Alert.alert("Success", "Two-factor authentication has been enabled!");
+      } else {
+        Alert.alert(
+          "Invalid Code",
+          "The verification code is incorrect. Please try again."
+        );
+        setVerificationCode("");
+      }
+    } catch (error) {
+      Alert.alert("Error", "Failed to verify code. Please try again.");
+    } finally {
+      setIsVerifyingCode(false);
+    }
+  }, [verificationCode, sentCode, timerRef]);
 
   // Password change handler
   const handlePasswordChange = useCallback(async () => {
@@ -385,14 +782,18 @@ function ProfileScreen({
     if (Object.keys(newErrors).length === 0) {
       setIsLoading(true);
       try {
-        // For UI testing - simulate password update
-        await new Promise((resolve) => setTimeout(resolve, 1000));
+        // Simulate password update process
+        await new Promise((resolve) => setTimeout(resolve, 1500));
 
+        // Clear form and reset states
         setCurrentPassword("");
         setNewPassword("");
         setConfirmPassword("");
+        setRealTimePasswordErrors({});
+        setPasswordStrength({ score: 0, feedback: [], isValid: false });
         setShowPasswordSection(false);
-        Alert.alert("Success", "Password updated successfully!");
+
+        Alert.alert("Success", "Your password has been updated successfully!");
         goBack();
       } catch (error) {
         Alert.alert("Error", "Failed to update password. Please try again.");
@@ -402,7 +803,7 @@ function ProfileScreen({
     }
   }, [currentPassword, newPassword, confirmPassword]);
 
-  // Authentication handlers - UI only for now
+  // Authentication handlers
   const handleSignOut = useCallback(async () => {
     Alert.alert("Sign Out", "Are you sure you want to sign out?", [
       { text: "Cancel", style: "cancel" },
@@ -412,15 +813,17 @@ function ProfileScreen({
         onPress: async () => {
           try {
             setIsLoading(true);
-            // For UI testing - simulate sign out
-            await new Promise((resolve) => setTimeout(resolve, 1000));
+
+            if (onSignOut) {
+              await onSignOut();
+            }
+
+            // Reset local states
             setCurrentUser(null);
-            Alert.alert("Signed Out", "You have been signed out successfully.");
-            // Reset all profile states
-            setProfileName("");
-            setProfileEmail("");
             setPhone("");
             setProfileImage(null);
+
+            Alert.alert("Signed Out", "You have been signed out successfully.");
           } catch (error) {
             Alert.alert("Error", "Failed to sign out. Please try again.");
           } finally {
@@ -429,7 +832,7 @@ function ProfileScreen({
         },
       },
     ]);
-  }, []);
+  }, [onSignOut]);
 
   const handleDeleteAccount = useCallback(async () => {
     Alert.alert(
@@ -443,86 +846,269 @@ function ProfileScreen({
           onPress: async () => {
             try {
               setIsLoading(true);
-              // For UI testing - simulate account deletion
-              await new Promise((resolve) => setTimeout(resolve, 1000));
-              setCurrentUser(null);
+
+              // Add email to deleted accounts list before clearing data
+              const deletedEmail = profileEmail || currentUser?.email;
+              if (deletedEmail) {
+                try {
+                  const existingDeletedAccounts = await AsyncStorage.getItem("@deleted_accounts");
+                  const deletedAccounts = existingDeletedAccounts 
+                    ? JSON.parse(existingDeletedAccounts) 
+                    : [];
+                  
+                  // Add current account to deleted list with timestamp
+                  const deletedAccountRecord = {
+                    email: deletedEmail.toLowerCase(),
+                    deletedAt: new Date().toISOString(),
+                    reason: "user_requested"
+                  };
+                  
+                  deletedAccounts.push(deletedAccountRecord);
+                  await AsyncStorage.setItem("@deleted_accounts", JSON.stringify(deletedAccounts));
+                } catch (error) {
+                  // Continue with deletion even if we can't save to deleted list
+                }
+              }
+              
+              // Clear ALL stored data from AsyncStorage
+              const keysToRemove = [
+                // Profile data
+                "@profile_image",
+                "@two_factor_enabled", 
+                "@user_settings",
+                "@profile_data",
+                "@current_user",
+                "profileName",
+                "profileEmail", 
+                "profilePhone",
+                "profileEmoji",
+                "isAuthenticated",
+                // Password data
+                `password_${(profileEmail || currentUser?.email || '').toLowerCase()}`,
+                // App data
+                "bills",
+                "billBuddy_groups", // Groups storage key
+                "lastAddedBill",
+                // Settings (keep darkMode and liquidGlassMode for UX)
+                // "darkMode",
+                // "liquidGlassMode"
+              ];
+              
+              // Get all AsyncStorage keys to find user-specific data
+              try {
+                const allKeys = await AsyncStorage.getAllKeys();
+                const userEmail = profileEmail || currentUser?.email;
+                const userName = profileName || currentUser?.name;
+                
+                // Find and add user-scoped keys
+                allKeys.forEach(key => {
+                  // Friends data (friends_${userId})
+                  if (key.startsWith('friends_')) {
+                    keysToRemove.push(key);
+                  }
+                  // Chat data (chat_${chatKey})
+                  if (key.startsWith('chat_')) {
+                    keysToRemove.push(key);
+                  }
+                  // Settlement data (settlement_${friendId}_${userId})
+                  if (key.startsWith('settlement_')) {
+                    keysToRemove.push(key);
+                  }
+                  // Password data (password_${email})
+                  if (key.startsWith('password_')) {
+                    keysToRemove.push(key);
+                  }
+                  // Any other user-specific data
+                  if (userEmail && key.includes(userEmail.toLowerCase())) {
+                    keysToRemove.push(key);
+                  }
+                  if (userName && key.includes(userName.toLowerCase())) {
+                    keysToRemove.push(key);
+                  }
+                });
+              } catch (error) {
+                // Continue with basic deletion if we can't get all keys
+              }
+              
+              // Remove all identified data
+              try {
+                await AsyncStorage.multiRemove(keysToRemove);
+              } catch (error) {
+                // If multiRemove fails, try removing keys individually
+                try {
+                  for (const key of keysToRemove) {
+                    await AsyncStorage.removeItem(key);
+                  }
+                } catch (individualError) {
+                  // Continue with state reset even if storage cleanup fails
+                }
+              }
+
+              // Set deletion flag to prevent data reloading
+              setIsAccountDeleted(true);
+
+              // Reset all local states immediately
+              try {
+                setCurrentUser(null);
+                setProfileImage(null);
+                setTwoFactorAuth(false);
+                setTwoFactorStep("setup");
+                setVerificationCode("");
+                setSentCode("");
+                setErrors({});
+                setRealTimePasswordErrors({});
+                setPasswordStrength({ score: 0, feedback: [], isValid: false });
+                setPhone("");
+                
+                // Reset parent component states if available
+                if (onDataReset && typeof onDataReset === 'function') {
+                  onDataReset(); // This will clear bills, friends, groups in App.js
+                }
+              } catch (stateError) {
+                // Continue even if state reset fails
+              }
+
+              // Reset parent component states
+              if (setProfileName) setProfileName("");
+              if (setProfileEmail) setProfileEmail("");
+              if (setProfilePhone) setProfilePhone("");
+
+              // Reset user settings to defaults
+              setUserSettings({
+                emailNotifications: true,
+                pushNotifications: true,
+                smsNotifications: false,
+              });
+
+              setIsLoading(false);
+
+              // Show success message and handle navigation
               Alert.alert(
                 "Account Deleted",
                 "Your account has been permanently deleted.",
-                [{ text: "OK" }]
+                [
+                  {
+                    text: "OK",
+                    onPress: () => {
+                      // Navigate only after user presses OK
+                      setTimeout(() => {
+                        if (onNavigateToSignUp) {
+                          onNavigateToSignUp();
+                        } else if (navigation) {
+                          navigation.reset({
+                            index: 0,
+                            routes: [{ name: "SignUp" }],
+                          });
+                        } else if (onSignOut) {
+                          // Fallback: trigger sign out which should handle navigation
+                          onSignOut();
+                        } else {
+                          // Last resort: go back to main screen
+                          setCurrentTab("main");
+                        }
+                      }, 100);
+                    },
+                  },
+                ]
               );
-              // Reset all profile states
-              setProfileName("");
-              setProfileEmail("");
-              setPhone("");
-              setProfileImage(null);
-              setErrors({});
             } catch (error) {
-              Alert.alert("Error", "An unexpected error occurred.");
-            } finally {
               setIsLoading(false);
+              console.error("Account deletion error:", error);
+              Alert.alert(
+                "Error", 
+                `Account deletion failed: ${error.message || 'Unknown error'}. Please try again.`
+              );
             }
           },
         },
       ]
     );
-  }, []);
+  }, [
+    onNavigateToSignUp,
+    navigation,
+    onSignOut,
+    setProfileName,
+    setProfileEmail,
+    setProfilePhone,
+  ]);
 
   // Feedback handlers
-  const handleRateApp = useCallback(() => {
-    Alert.alert(
-      "Rate BillBuddy",
-      "Help us improve by rating BillBuddy on the app store!",
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Rate Now",
-          onPress: () => {
-            // In a real app, this would open the app store
-            const appStoreUrl =
-              Platform.OS === "ios"
-                ? "https://apps.apple.com/app/billbuddy"
-                : "https://play.google.com/store/apps/details?id=com.billbuddy";
+  const handleRateApp = useCallback(async () => {
+    try {
+      const result = await new Promise((resolve) => {
+        Alert.alert(
+          "Rate BillBuddy",
+          "Help us improve by rating BillBuddy on the app store!",
+          [
+            { text: "Cancel", style: "cancel", onPress: () => resolve(false) },
+            {
+              text: "Rate Now",
+              onPress: () => resolve(true),
+            },
+          ]
+        );
+      });
 
-            Linking.openURL(appStoreUrl).catch(() => {
-              Alert.alert("Success", "Thank you for your feedback! ⭐⭐⭐⭐⭐");
-            });
-          },
-        },
-      ]
-    );
+      if (result) {
+        // In a real app, this would open the app store
+        const appStoreUrl =
+          Platform.OS === "ios"
+            ? "https://apps.apple.com/app/billbuddy"
+            : "https://play.google.com/store/apps/details?id=com.billbuddy";
+
+        await Linking.openURL(appStoreUrl).catch(() => {
+          Alert.alert("Thank You!", "Thank you for your feedback! ⭐⭐⭐⭐⭐");
+        });
+      }
+    } catch (error) {
+      Alert.alert("Error", "Unable to open app store. Please try again later.");
+    }
   }, []);
 
-  const handleContactUs = useCallback(() => {
-    Alert.alert(
-      "Contact Us",
-      "How would you like to contact our support team?",
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Email",
-          onPress: () => {
-            const emailUrl =
-              "mailto:support@billbuddy.com?subject=App Support Request";
-            Linking.openURL(emailUrl).catch(() => {
-              Alert.alert("Info", "Please email us at: support@billbuddy.com");
-            });
-          },
-        },
-        {
-          text: "Phone",
-          onPress: () => {
-            const phoneUrl = "tel:+1-800-BILLBUDDY";
-            Linking.openURL(phoneUrl).catch(() => {
-              Alert.alert("Info", "Please call us at: 1-800-BILLBUDDY");
-            });
-          },
-        },
-      ]
-    );
+  const handleContactUs = useCallback(async () => {
+    try {
+      const result = await new Promise((resolve) => {
+        Alert.alert(
+          "Contact Us",
+          "How would you like to contact our support team?",
+          [
+            { text: "Cancel", style: "cancel", onPress: () => resolve(null) },
+            {
+              text: "Email",
+              onPress: () => resolve("email"),
+            },
+            {
+              text: "Phone",
+              onPress: () => resolve("phone"),
+            },
+          ]
+        );
+      });
+
+      if (result === "email") {
+        const emailUrl =
+          "mailto:support@billbuddy.com?subject=App Support Request";
+        await Linking.openURL(emailUrl).catch(() => {
+          Alert.alert(
+            "Contact Info",
+            "Please email us at: support@billbuddy.com"
+          );
+        });
+      } else if (result === "phone") {
+        const phoneUrl = "tel:+1-800-BILLBUDDY";
+        await Linking.openURL(phoneUrl).catch(() => {
+          Alert.alert("Contact Info", "Please call us at: 1-800-BILLBUDDY");
+        });
+      }
+    } catch (error) {
+      Alert.alert(
+        "Error",
+        "Unable to open contact method. Please try again later."
+      );
+    }
   }, []);
 
-  // Form validation and save - now using UserManager
+  // Form validation and save
   const validateForm = useCallback(() => {
     const newErrors = {};
 
@@ -554,26 +1140,32 @@ function ProfileScreen({
     setIsLoading(true);
 
     try {
-      // For UI testing - simulate profile save
       await new Promise((resolve) => setTimeout(resolve, 1000));
 
-      // Update parent component states
-      setProfileName(profileName.trim());
-      setProfileEmail(profileEmail.trim().toLowerCase());
-      setProfilePhone(phone.trim());
+      // Clean and update profile data
+      const cleanName = profileName.trim();
+      const cleanEmail = profileEmail.trim().toLowerCase();
+      const cleanPhone = phone.trim();
 
-      // Update local currentUser state if exists
+      // Update parent component states
+      setProfileName(cleanName);
+      setProfileEmail(cleanEmail);
+      setProfilePhone(cleanPhone);
+
+      // Update local user state
       if (currentUser) {
-        setCurrentUser({
+        const updatedUser = {
           ...currentUser,
-          name: profileName.trim(),
-          email: profileEmail.trim().toLowerCase(),
-          phone: phone.trim(),
+          name: cleanName,
+          email: cleanEmail,
+          phone: cleanPhone,
           profileImage: profileImage,
-        });
+          updatedAt: new Date().toISOString(),
+        };
+        setCurrentUser(updatedUser);
       }
 
-      Alert.alert("Success", "Profile updated successfully!");
+      Alert.alert("Success", "Your profile has been updated successfully!");
       goBack();
     } catch (error) {
       Alert.alert("Error", "Failed to update profile. Please try again.");
@@ -599,11 +1191,15 @@ function ProfileScreen({
         const newSettings = { ...userSettings, [setting]: value };
         setUserSettings(newSettings);
 
-        // For UI testing - just update local state
+        // Save to AsyncStorage
+        await AsyncStorage.setItem(
+          "@user_settings",
+          JSON.stringify(newSettings)
+        );
       } catch (error) {
-        // Error handled silently
         // Revert the local state if save failed
         setUserSettings(userSettings);
+        Alert.alert("Error", "Failed to update setting. Please try again.");
       }
     },
     [userSettings]
@@ -786,7 +1382,7 @@ function ProfileScreen({
       </TouchableOpacity>
 
       {/* Authentication Section */}
-      <View style={styles.authSection}>
+      <View style={[styles.authSection, styles.authSectionCloser]}>
         {currentUser ? (
           <TouchableOpacity
             style={[
@@ -835,8 +1431,8 @@ function ProfileScreen({
             <Ionicons
               name="chevron-back-circle-outline"
               size={30}
-              color={darkMode ? "#D69E2E" : "#8B4513"}
-              style={{ marginTop: 5 }}
+              color={darkMode ? Colors.text.accent.dark : Colors.primary}
+              style={{ marginTop: Spacing.xs }}
             />
           </View>
         </TouchableOpacity>
@@ -978,6 +1574,7 @@ function ProfileScreen({
         <TouchableOpacity
           style={[
             styles.saveButton,
+            styles.saveButtonHigher,
             darkMode && styles.darkSaveButton,
             isLoading && styles.saveButtonDisabled,
           ]}
@@ -1012,8 +1609,8 @@ function ProfileScreen({
             <Ionicons
               name="chevron-back-circle-outline"
               size={30}
-              color={darkMode ? "#D69E2E" : "#8B4513"}
-              style={{ marginTop: 5 }}
+              color={darkMode ? Colors.text.accent.dark : Colors.primary}
+              style={{ marginTop: Spacing.xs }}
             />
           </View>
         </TouchableOpacity>
@@ -1022,14 +1619,21 @@ function ProfileScreen({
         </Text>
       </View>
 
+      {/* Two-Factor Authentication Section */}
       <View
         style={[styles.formContainer, darkMode && styles.darkFormContainer]}
       >
-        {/* Two-Factor Authentication */}
+        <Text style={[styles.sectionTitle, darkMode && styles.darkText]}>
+          🔒 Two-Factor Authentication
+        </Text>
+        <Text style={[styles.sectionSubtitle, darkMode && styles.darkSubtext]}>
+          Add an extra layer of security to your account
+        </Text>
+
         <View style={styles.preferenceRow}>
           <View style={styles.preferenceInfo}>
             <Text style={[styles.preferenceTitle, darkMode && styles.darkText]}>
-              Two-Factor Authentication
+              Enable 2FA
             </Text>
             <Text
               style={[
@@ -1037,19 +1641,125 @@ function ProfileScreen({
                 darkMode && styles.darkSubtext,
               ]}
             >
-              Add an extra layer of security to your account
+              {twoFactorStep === "enabled"
+                ? "Enabled and active"
+                : "Secure your account with SMS verification"}
             </Text>
           </View>
           <Switch
             value={twoFactorAuth}
             onValueChange={handleTwoFactorToggle}
             trackColor={{
-              false: "#ddd",
-              true: darkMode ? "#D69E2E" : "#8B4513",
+              false: darkMode ? Colors.gray600 : Colors.gray300,
+              true: darkMode ? Colors.secondary : Colors.primary,
             }}
-            thumbColor="#fff"
+            thumbColor={Colors.white}
           />
         </View>
+
+        {/* Two-Factor Verification Process */}
+        {twoFactorAuth && twoFactorStep !== "enabled" && (
+          <View style={styles.twoFactorSetup}>
+            <Text style={[styles.label, darkMode && styles.darkText]}>
+              Verification Code *
+            </Text>
+            <TextInput
+              placeholder="Enter 6-digit code"
+              placeholderTextColor={
+                darkMode
+                  ? Colors.text.tertiary.dark
+                  : Colors.text.tertiary.light
+              }
+              value={verificationCode}
+              onChangeText={setVerificationCode}
+              style={[
+                styles.input,
+                darkMode && styles.darkInput,
+                styles.verificationCodeInput,
+              ]}
+              keyboardType="number-pad"
+              maxLength={6}
+              accessibilityLabel="Enter six-digit verification code"
+              accessibilityHint="Type the verification code sent to your phone"
+            />
+            <View style={styles.twoFactorActions}>
+              <TouchableOpacity
+                style={[
+                  styles.verifyButton,
+                  darkMode && { backgroundColor: Colors.secondary },
+                  (verificationCode.length !== 6 || isVerifyingCode) &&
+                    styles.saveButtonDisabled,
+                ]}
+                onPress={verifyTwoFactorCode}
+                disabled={verificationCode.length !== 6 || isVerifyingCode}
+                accessibilityRole="button"
+                accessibilityLabel="Verify two-factor authentication code"
+                accessibilityHint="Tap to verify the 6-digit code you received"
+              >
+                <Text style={styles.verifyButtonText}>
+                  {isVerifyingCode ? "Verifying..." : "Verify Code"}
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[
+                  styles.resendButton,
+                  (codeTimer > 0 || isVerifyingCode) &&
+                    styles.saveButtonDisabled,
+                ]}
+                onPress={sendVerificationCode}
+                disabled={codeTimer > 0 || isVerifyingCode}
+                accessibilityRole="button"
+                accessibilityLabel="Resend verification code"
+                accessibilityHint="Tap to receive a new verification code"
+              >
+                <Text
+                  style={[styles.resendButtonText, darkMode && styles.darkText]}
+                >
+                  {codeTimer > 0
+                    ? `Resend in ${codeTimer}s`
+                    : isVerifyingCode
+                    ? "Sending..."
+                    : "Resend Code"}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
+
+        {twoFactorStep === "enabled" && (
+          <View style={styles.twoFactorEnabled}>
+            <Text
+              style={[styles.successText, darkMode && { color: "#10B981" }]}
+            >
+              ✓ Two-factor authentication is active
+            </Text>
+            <Text
+              style={[
+                styles.twoFactorEnabledText,
+                darkMode && styles.darkSubtext,
+              ]}
+            >
+              Your account is protected with SMS verification
+            </Text>
+          </View>
+        )}
+      </View>
+
+      {/* Password Change Section */}
+      <View
+        style={[
+          styles.formContainer,
+          darkMode && styles.darkFormContainer,
+          { marginTop: 20 },
+        ]}
+      >
+        <Text style={[styles.sectionTitle, darkMode && styles.darkText]}>
+          🔑 Password Security
+        </Text>
+        <Text style={[styles.sectionSubtitle, darkMode && styles.darkSubtext]}>
+          Change your account password
+        </Text>
 
         {/* Password Change Section */}
         <View style={styles.passwordSection}>
@@ -1085,11 +1795,13 @@ function ProfileScreen({
                     placeholder="Enter current password"
                     placeholderTextColor={darkMode ? "#A0AEC0" : "#999"}
                     value={currentPassword}
-                    onChangeText={setCurrentPassword}
+                    onChangeText={handleCurrentPasswordChange}
                     style={[
                       styles.passwordInput,
                       darkMode && styles.darkText,
-                      errors.currentPassword && styles.inputError,
+                      (errors.currentPassword ||
+                        realTimePasswordErrors.currentPassword) &&
+                        styles.inputError,
                     ]}
                     secureTextEntry={!showCurrentPassword}
                     autoCapitalize="none"
@@ -1097,14 +1809,25 @@ function ProfileScreen({
                   <TouchableOpacity
                     style={styles.eyeIcon}
                     onPress={() => setShowCurrentPassword(!showCurrentPassword)}
+                    accessibilityRole="button"
+                    accessibilityLabel={
+                      showCurrentPassword
+                        ? "Hide current password"
+                        : "Show current password"
+                    }
+                    accessibilityHint="Tap to toggle password visibility"
                   >
                     <Text style={styles.eyeIconText}>
                       {showCurrentPassword ? "🙈" : "👁️"}
                     </Text>
                   </TouchableOpacity>
                 </View>
-                {errors.currentPassword && (
-                  <Text style={styles.errorText}>{errors.currentPassword}</Text>
+                {(errors.currentPassword ||
+                  realTimePasswordErrors.currentPassword) && (
+                  <Text style={styles.errorText}>
+                    {errors.currentPassword ||
+                      realTimePasswordErrors.currentPassword}
+                  </Text>
                 )}
               </View>
 
@@ -1122,11 +1845,13 @@ function ProfileScreen({
                     placeholder="Enter new password"
                     placeholderTextColor={darkMode ? "#A0AEC0" : "#999"}
                     value={newPassword}
-                    onChangeText={setNewPassword}
+                    onChangeText={handleNewPasswordChange}
                     style={[
                       styles.passwordInput,
                       darkMode && styles.darkText,
-                      errors.newPassword && styles.inputError,
+                      (errors.newPassword ||
+                        realTimePasswordErrors.newPassword) &&
+                        styles.inputError,
                     ]}
                     secureTextEntry={!showNewPassword}
                     autoCapitalize="none"
@@ -1134,14 +1859,76 @@ function ProfileScreen({
                   <TouchableOpacity
                     style={styles.eyeIcon}
                     onPress={() => setShowNewPassword(!showNewPassword)}
+                    accessibilityRole="button"
+                    accessibilityLabel={
+                      showNewPassword
+                        ? "Hide new password"
+                        : "Show new password"
+                    }
+                    accessibilityHint="Tap to toggle password visibility"
                   >
                     <Text style={styles.eyeIconText}>
                       {showNewPassword ? "🙈" : "👁️"}
                     </Text>
                   </TouchableOpacity>
                 </View>
-                {errors.newPassword && (
-                  <Text style={styles.errorText}>{errors.newPassword}</Text>
+                {(errors.newPassword || realTimePasswordErrors.newPassword) && (
+                  <Text style={styles.errorText}>
+                    {errors.newPassword || realTimePasswordErrors.newPassword}
+                  </Text>
+                )}
+                {newPassword && (
+                  <View style={styles.passwordStrengthContainer}>
+                    <Text
+                      style={[
+                        styles.passwordStrengthLabel,
+                        darkMode && styles.darkText,
+                      ]}
+                    >
+                      Password Strength:
+                      <Text
+                        style={[
+                          styles.passwordStrengthLevel,
+                          {
+                            color:
+                              passwordStrength.level === "weak"
+                                ? "#EF4444"
+                                : passwordStrength.level === "medium"
+                                ? "#F59E0B"
+                                : "#10B981",
+                          },
+                        ]}
+                      >
+                        {passwordStrength.level?.toUpperCase()}
+                      </Text>
+                    </Text>
+                    <View style={styles.passwordStrengthBar}>
+                      <View
+                        style={[
+                          styles.passwordStrengthFill,
+                          {
+                            width: `${(passwordStrength.score / 5) * 100}%`,
+                            backgroundColor:
+                              passwordStrength.level === "weak"
+                                ? "#EF4444"
+                                : passwordStrength.level === "medium"
+                                ? "#F59E0B"
+                                : "#10B981",
+                          },
+                        ]}
+                      />
+                    </View>
+                    {passwordStrength.feedback.length > 0 && (
+                      <Text
+                        style={[
+                          styles.passwordFeedback,
+                          darkMode && styles.darkSubtext,
+                        ]}
+                      >
+                        Missing: {passwordStrength.feedback.join(", ")}
+                      </Text>
+                    )}
+                  </View>
                 )}
               </View>
 
@@ -1159,11 +1946,13 @@ function ProfileScreen({
                     placeholder="Confirm new password"
                     placeholderTextColor={darkMode ? "#A0AEC0" : "#999"}
                     value={confirmPassword}
-                    onChangeText={setConfirmPassword}
+                    onChangeText={handleConfirmPasswordChange}
                     style={[
                       styles.passwordInput,
                       darkMode && styles.darkText,
-                      errors.confirmPassword && styles.inputError,
+                      (errors.confirmPassword ||
+                        realTimePasswordErrors.confirmPassword) &&
+                        styles.inputError,
                     ]}
                     secureTextEntry={!showConfirmPassword}
                     autoCapitalize="none"
@@ -1171,15 +1960,38 @@ function ProfileScreen({
                   <TouchableOpacity
                     style={styles.eyeIcon}
                     onPress={() => setShowConfirmPassword(!showConfirmPassword)}
+                    accessibilityRole="button"
+                    accessibilityLabel={
+                      showConfirmPassword
+                        ? "Hide password confirmation"
+                        : "Show password confirmation"
+                    }
+                    accessibilityHint="Tap to toggle password visibility"
                   >
                     <Text style={styles.eyeIconText}>
                       {showConfirmPassword ? "🙈" : "👁️"}
                     </Text>
                   </TouchableOpacity>
                 </View>
-                {errors.confirmPassword && (
-                  <Text style={styles.errorText}>{errors.confirmPassword}</Text>
+                {(errors.confirmPassword ||
+                  realTimePasswordErrors.confirmPassword) && (
+                  <Text style={styles.errorText}>
+                    {errors.confirmPassword ||
+                      realTimePasswordErrors.confirmPassword}
+                  </Text>
                 )}
+                {confirmPassword &&
+                  newPassword &&
+                  confirmPassword === newPassword && (
+                    <Text
+                      style={[
+                        styles.successText,
+                        darkMode && { color: "#10B981" },
+                      ]}
+                    >
+                      ✓ Passwords match
+                    </Text>
+                  )}
               </View>
 
               <TouchableOpacity
@@ -1222,8 +2034,8 @@ function ProfileScreen({
             <Ionicons
               name="chevron-back-circle-outline"
               size={30}
-              color={darkMode ? "#D69E2E" : "#8B4513"}
-              style={{ marginTop: 5 }}
+              color={darkMode ? Colors.text.accent.dark : Colors.primary}
+              style={{ marginTop: Spacing.xs }}
             />
           </View>
         </TouchableOpacity>
@@ -1256,10 +2068,10 @@ function ProfileScreen({
               updateUserSetting("emailNotifications", value)
             }
             trackColor={{
-              false: "#ddd",
-              true: darkMode ? "#D69E2E" : "#8B4513",
+              false: darkMode ? Colors.gray600 : Colors.gray300,
+              true: darkMode ? Colors.secondary : Colors.primary,
             }}
-            thumbColor="#fff"
+            thumbColor={Colors.white}
           />
         </View>
 
@@ -1283,10 +2095,10 @@ function ProfileScreen({
               updateUserSetting("smsNotifications", value)
             }
             trackColor={{
-              false: "#ddd",
-              true: darkMode ? "#D69E2E" : "#8B4513",
+              false: darkMode ? Colors.gray600 : Colors.gray300,
+              true: darkMode ? Colors.secondary : Colors.primary,
             }}
-            thumbColor="#fff"
+            thumbColor={Colors.white}
           />
         </View>
 
@@ -1310,10 +2122,10 @@ function ProfileScreen({
               updateUserSetting("pushNotifications", value)
             }
             trackColor={{
-              false: "#ddd",
-              true: darkMode ? "#D69E2E" : "#8B4513",
+              false: darkMode ? Colors.gray600 : Colors.gray300,
+              true: darkMode ? Colors.secondary : Colors.primary,
             }}
-            thumbColor="#fff"
+            thumbColor={Colors.white}
           />
         </View>
       </View>
@@ -1344,10 +2156,10 @@ function ProfileScreen({
             value={darkMode}
             onValueChange={setDarkMode}
             trackColor={{
-              false: "#ddd",
-              true: darkMode ? "#D69E2E" : "#8B4513",
+              false: darkMode ? Colors.gray600 : Colors.gray300,
+              true: darkMode ? Colors.secondary : Colors.primary,
             }}
-            thumbColor="#fff"
+            thumbColor={Colors.white}
           />
         </View>
 
@@ -1369,10 +2181,10 @@ function ProfileScreen({
             value={liquidGlassMode}
             onValueChange={setLiquidGlassMode}
             trackColor={{
-              false: "#ddd",
-              true: darkMode ? "#D69E2E" : "#8B4513",
+              false: darkMode ? Colors.gray600 : Colors.gray300,
+              true: darkMode ? Colors.secondary : Colors.primary,
             }}
-            thumbColor="#fff"
+            thumbColor={Colors.white}
           />
         </View>
       </View>
@@ -1394,8 +2206,8 @@ function ProfileScreen({
             <Ionicons
               name="chevron-back-circle-outline"
               size={30}
-              color={darkMode ? "#D69E2E" : "#8B4513"}
-              style={{ marginTop: 5 }}
+              color={darkMode ? Colors.text.accent.dark : Colors.primary}
+              style={{ marginTop: Spacing.xs }}
             />
           </View>
         </TouchableOpacity>
@@ -1565,10 +2377,10 @@ function ProfileScreen({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#EFE4D2",
+    backgroundColor: Colors.background.light,
   },
   darkContainer: {
-    backgroundColor: "#1A1A1A",
+    backgroundColor: Colors.background.dark,
   },
   keyboardAvoid: {
     flex: 1,
@@ -1588,14 +2400,13 @@ const styles = StyleSheet.create({
     marginBottom: 25,
   },
   title: {
-    fontSize: 28,
-    fontWeight: "700",
-    color: "#8B4513", // Brown theme from Bills screen
-    marginBottom: 6,
+    ...Typography.textStyles.h1,
+    color: Colors.primary,
+    marginBottom: Spacing.sm,
   },
   subtitle: {
-    fontSize: 16,
-    color: "#6B7280",
+    ...Typography.textStyles.body,
+    color: Colors.text.secondary.light,
     textAlign: "center",
   },
 
@@ -1603,10 +2414,8 @@ const styles = StyleSheet.create({
   subHeader: {
     flexDirection: "row",
     alignItems: "center",
-    display: "flex",
     justifyContent: "center",
-    alignItems: "center",
-    marginBottom: 30,
+    marginBottom: Spacing["2xl"],
   },
   backButton: {
     flexDirection: "row",
@@ -1635,14 +2444,13 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   subTitle: {
-    fontSize: 24,
-    fontWeight: "700",
-    color: "#8B4513",
+    ...Typography.textStyles.h2,
+    color: Colors.primary,
     textAlign: "center",
     flex: 1,
   },
   darkSubTitle: {
-    color: "#D69E2E", // Gold color for dark mode
+    color: Colors.text.accent.dark,
   },
 
   // Profile Picture
@@ -1652,7 +2460,7 @@ const styles = StyleSheet.create({
   },
   profileImageContainer: {
     position: "relative",
-    marginBottom: 12,
+    marginBottom: 25,
   },
   profileImage: {
     width: 125,
@@ -1666,15 +2474,14 @@ const styles = StyleSheet.create({
     width: 125,
     height: 125,
     borderRadius: 75,
-    backgroundColor: "#8B4513",
+    backgroundColor: Colors.primary,
     justifyContent: "center",
     alignItems: "center",
     borderWidth: 3,
-    bottom: 8,
-    borderColor: "#fff",
+    borderColor: Colors.white,
   },
   darkPlaceholder: {
-    backgroundColor: "#4A5568",
+    backgroundColor: Colors.gray600,
   },
   profileImageText: {
     fontSize: 32,
@@ -1684,22 +2491,22 @@ const styles = StyleSheet.create({
   },
   cameraIcon: {
     position: "absolute",
-    bottom: 5,
+    bottom: 15,
     right: 5,
     width: 32,
     height: 32,
     borderRadius: 16,
-    backgroundColor: "#8B4513",
+    backgroundColor: Colors.primary,
     justifyContent: "center",
     alignItems: "center",
     borderWidth: 2,
-    borderColor: "#fff",
+    borderColor: Colors.white,
   },
   cameraEmoji: {
     fontSize: 14,
   },
   profileImageHint: {
-    fontSize: 14,
+    fontSize: 16,
     color: "#6B7280",
     textAlign: "center",
   },
@@ -1711,19 +2518,18 @@ const styles = StyleSheet.create({
   menuItem: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#fff",
-    borderRadius: 16,
-    padding: 20,
-    marginBottom: 12,
-    shadowColor: "#000",
+    backgroundColor: Colors.background.card.light,
+    borderRadius: BorderRadius.lg,
+    padding: Spacing.xl,
+    marginBottom: Spacing.md,
+    shadowColor: Colors.black,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 8,
     elevation: 4,
-    bottom: 5,
   },
   darkMenuitem: {
-    backgroundColor: "#2D3748",
+    backgroundColor: Colors.background.card.dark,
   },
   menuIconContainer: {
     width: 50,
@@ -1741,14 +2547,13 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   menuTitle: {
-    fontSize: 18,
-    fontWeight: "600",
-    color: "#374151",
+    ...Typography.textStyles.h4,
+    color: Colors.text.primary.light,
     marginBottom: 4,
   },
   menuSubtitle: {
-    fontSize: 14,
-    color: "#6B7280",
+    ...Typography.textStyles.bodySmall,
+    color: Colors.text.secondary.light,
   },
   chevron: {
     fontSize: 24,
@@ -1758,17 +2563,17 @@ const styles = StyleSheet.create({
 
   // Form Container
   formContainer: {
-    backgroundColor: "#fff",
-    borderRadius: 16,
-    padding: 20,
-    shadowColor: "#000",
+    backgroundColor: Colors.background.card.light,
+    borderRadius: BorderRadius.lg,
+    padding: Spacing.xl,
+    shadowColor: Colors.black,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 8,
     elevation: 4,
   },
   darkFormContainer: {
-    backgroundColor: "#2D3748",
+    backgroundColor: Colors.background.card.dark,
   },
 
   // Form Elements
@@ -1905,7 +2710,7 @@ const styles = StyleSheet.create({
 
   // Password Section
   passwordSection: {
-    marginTop: 16,
+    marginTop: 6,
   },
   passwordToggle: {
     alignSelf: "flex-start",
@@ -1945,6 +2750,11 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     alignItems: "center",
     marginTop: 8,
+    shadowColor: "#8B4513",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 6,
   },
   passwordButtonText: {
     color: "#fff",
@@ -1961,8 +2771,6 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "center",
     paddingVertical: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: "#E5E7EB",
   },
   preferenceInfo: {
     flex: 1,
@@ -1981,21 +2789,23 @@ const styles = StyleSheet.create({
 
   // Save Button
   saveButton: {
-    backgroundColor: "#8B4513", // Brown theme for consistency
-    borderRadius: 12,
-    paddingVertical: 15,
+    backgroundColor: Colors.primary,
+    borderRadius: BorderRadius.md,
+    paddingVertical: Spacing.lg,
     alignItems: "center",
-    marginTop: 20,
-    shadowColor: "#8B4513",
+    marginTop: Spacing.xl,
+    shadowColor: Colors.primary,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 8,
     elevation: 6,
-    bottom: 10,
+  },
+  saveButtonHigher: {
+    marginTop: Spacing.md,
   },
   darkSaveButton: {
-    backgroundColor: "#D69E2E", // Gold theme for dark mode
-    shadowColor: "#D69E2E",
+    backgroundColor: Colors.text.accent.dark,
+    shadowColor: Colors.text.accent.dark,
   },
   saveButtonDisabled: {
     backgroundColor: "#9CA3AF",
@@ -2015,6 +2825,9 @@ const styles = StyleSheet.create({
   authSection: {
     marginTop: 50,
   },
+  authSectionCloser: {
+    marginTop: 30,
+  },
   authButton: {
     borderRadius: 12,
     paddingVertical: 18,
@@ -2026,12 +2839,10 @@ const styles = StyleSheet.create({
     elevation: 6,
   },
   signInButton: {
-    backgroundColor: "#007AFF",
-    bottom: 45,
+    backgroundColor: Colors.info.light,
   },
   signOutButton: {
-    backgroundColor: "#EF4444",
-    bottom: 45,
+    backgroundColor: Colors.error.light,
   },
   signInButtonText: {
     color: "#fff",
@@ -2048,26 +2859,25 @@ const styles = StyleSheet.create({
 
   // Dark mode text
   darkText: {
-    color: "#FFFFFF", // Pure white for maximum contrast
+    color: Colors.text.primary.dark,
   },
   darkTitleText: {
-    color: "#D69E2E", // Gold color for headers in dark mode
+    color: Colors.text.accent.dark,
   },
   darkSubtext: {
-    color: "#CBD5E0",
+    color: Colors.text.secondary.dark,
   },
 
   welcomeMessage: {
-    fontSize: 20,
-    fontWeight: "600",
-    color: "#8B4513",
-    marginBottom: 20,
-    marginTop: -20,
+    ...Typography.textStyles.h3,
+    color: Colors.primary,
+    marginBottom: Spacing.xl,
+    marginTop: -Spacing.xl,
     marginLeft: 10,
     textAlign: "center",
   },
   darkWelcomeMessage: {
-    color: "#D69E2E", // Gold color for welcome message in dark mode
+    color: Colors.text.accent.dark,
   },
 
   // Feedback Options
@@ -2136,6 +2946,120 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     fontSize: 16,
   },
+
+  // Section titles and headers
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#374151",
+    marginBottom: 6,
+  },
+  sectionSubtitle: {
+    fontSize: 14,
+    color: "#6B7280",
+    marginBottom: 16,
+    lineHeight: 18,
+  },
+
+  // Two-Factor Authentication styles
+  twoFactorSetup: {
+    marginTop: 12,
+    paddingTop: 8,
+  },
+  twoFactorActions: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginTop: Spacing.md,
+  },
+  verifyButton: {
+    backgroundColor: Colors.primary,
+    borderRadius: BorderRadius.md,
+    paddingVertical: Spacing.lg,
+    paddingHorizontal: Spacing["2xl"],
+    flex: 1,
+    marginRight: Spacing.sm,
+    alignItems: "center",
+    shadowColor: Colors.primary,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  verifyButtonText: {
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  resendButton: {
+    borderRadius: BorderRadius.md,
+    paddingVertical: Spacing.lg,
+    paddingHorizontal: Spacing["2xl"],
+    flex: 1,
+    marginLeft: Spacing.sm,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: Colors.gray300,
+    backgroundColor: Colors.background.card.light,
+  },
+  resendButtonText: {
+    color: "#6B7280",
+    fontSize: 16,
+    fontWeight: "500",
+  },
+  twoFactorEnabled: {
+    marginTop: 12,
+    paddingTop: 0,
+  },
+  twoFactorEnabledText: {
+    fontSize: 14,
+    color: "#6B7280",
+    marginTop: 6,
+  },
+
+  // Password strength indicator
+  passwordStrengthContainer: {
+    marginTop: 8,
+  },
+  passwordStrengthLabel: {
+    fontSize: 14,
+    color: "#374151",
+    marginBottom: 6,
+  },
+  passwordStrengthLevel: {
+    fontWeight: "600",
+  },
+  passwordStrengthBar: {
+    height: 4,
+    backgroundColor: "#E5E7EB",
+    borderRadius: 2,
+    marginBottom: 6,
+  },
+  passwordStrengthFill: {
+    height: "100%",
+    borderRadius: 2,
+    transition: "width 0.3s ease",
+  },
+  passwordFeedback: {
+    fontSize: 12,
+    color: "#6B7280",
+    fontStyle: "italic",
+  },
+
+  // Success text
+  successText: {
+    color: "#10B981",
+    fontSize: 14,
+    fontWeight: "500",
+    marginTop: 6,
+  },
+
+  // Verification code input
+  verificationCodeInput: {
+    textAlign: "center",
+    fontSize: Typography.fontSize.lg,
+    fontWeight: Typography.fontWeight.semibold,
+    letterSpacing: 2,
+  },
 });
 
 // PropTypes for type safety
@@ -2143,7 +3067,6 @@ ProfileScreen.propTypes = {
   profileName: PropTypes.string.isRequired,
   setProfileName: PropTypes.func.isRequired,
   profileEmoji: PropTypes.string,
-  setProfileEmoji: PropTypes.func.isRequired,
   profileEmail: PropTypes.string.isRequired,
   setProfileEmail: PropTypes.func.isRequired,
   profilePhone: PropTypes.string,
@@ -2152,13 +3075,19 @@ ProfileScreen.propTypes = {
   setDarkMode: PropTypes.func.isRequired,
   liquidGlassMode: PropTypes.bool.isRequired,
   setLiquidGlassMode: PropTypes.func.isRequired,
+  onSignOut: PropTypes.func,
   onTabPress: PropTypes.func,
+  onNavigateToSignUp: PropTypes.func,
+  navigation: PropTypes.object,
 };
 
 // Default props
 ProfileScreen.defaultProps = {
   profilePhone: "",
+  onSignOut: null,
   onTabPress: null,
+  onNavigateToSignUp: null,
+  navigation: null,
 };
 
 // Error Boundary Component for crash protection
